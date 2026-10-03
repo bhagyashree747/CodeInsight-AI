@@ -1,0 +1,4 @@
+pydantic
+httpx
+pytest
+python-dotenv
