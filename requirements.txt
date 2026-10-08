@@ -1,2 +1,4 @@
 requests
 python-dotenv
+tree-sitter
+tree-sitter-python

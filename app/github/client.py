@@ -48,3 +48,16 @@ class GitHubClient:
                 break
             page += 1
         return results
+
+    def get_file_text(self, owner, repo, path, ref):
+        """Fetch a file's raw text at a given commit. Returns None if not found."""
+        response = self.session.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/contents/{path}",
+            params={"ref": ref},
+            headers={"Accept": "application/vnd.github.raw+json"},
+            timeout=30,
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return response.content.decode("utf-8", errors="replace")

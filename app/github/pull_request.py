@@ -35,3 +35,13 @@ def fetch_pull_request(client, pr_url):
         "head_sha": pr["head"]["sha"],      # code after the PR (needed for Day 3-4)
         "changed_files": changed_files,
     }
+
+
+def fetch_file_at_head(client, pr, filename):
+    """Get the NEW version of a file (after the PR). Returns None if unavailable."""
+    owner, repo = pr["repository"].split("/")
+    for ref in (pr["head_sha"], f"refs/pull/{pr['pr_number']}/head"):
+        text = client.get_file_text(owner, repo, filename, ref)
+        if text is not None:
+            return text
+    return None
