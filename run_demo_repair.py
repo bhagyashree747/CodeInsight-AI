@@ -10,6 +10,19 @@ Demonstrates:
 """
 
 import os
+from pathlib import Path
+
+# Call load_dotenv() first to respect whatever provider is configured in .env
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent / ".env"
+    if _env_file.is_file():
+        load_dotenv(dotenv_path=_env_file, override=True)
+    else:
+        load_dotenv(override=True)
+except ImportError:
+    pass
+
 from app.relevance.filter import filter_findings
 from app.repair.agent import RepairAgent
 from app.repair.local_verifier import LocalVerifier
@@ -40,24 +53,29 @@ def print_banner(title: str) -> None:
 
 
 def format_fix_status(index: int, status: str, attempts: int) -> str:
-    """Format status string matching project specification."""
+    """Format status string matching project specification (verified, number of attempts, failed)."""
     if status == "verified":
         if attempts == 1:
-            return f"Fix #{index} verified"
+            return f"Fix #{index} verified (1 attempt)"
         else:
             return f"Fix #{index} {attempts} attempts -> verified"
     else:
-        return f"Fix #{index} failed"
+        return f"Fix #{index} failed ({attempts} attempt{'s' if attempts != 1 else ''})"
 
 
 def main() -> None:
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        _env = Path(__file__).resolve().parent / ".env"
+        if _env.is_file():
+            load_dotenv(dotenv_path=_env, override=True)
+        else:
+            load_dotenv(override=True)
     except ImportError:
         pass
 
-    active_provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+    raw_provider = os.getenv("LLM_PROVIDER")
+    active_provider = raw_provider.strip().lower() if raw_provider else "mock"
 
     print("=" * 80)
     print("  CODEINSIGHT AI - AUTOMATED REPAIR & RETRY AGENT DEMO")

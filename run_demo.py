@@ -9,6 +9,19 @@ Demonstrates automated code review and relevance filtering across 4 scenarios:
 
 import json
 import os
+from pathlib import Path
+
+# Call load_dotenv() first to respect whatever provider is configured in .env
+try:
+    from dotenv import load_dotenv
+    _env_file = Path(__file__).resolve().parent / ".env"
+    if _env_file.is_file():
+        load_dotenv(dotenv_path=_env_file, override=True)
+    else:
+        load_dotenv(override=True)
+except ImportError:
+    pass
+
 from app.relevance.filter import filter_findings
 from app.review.llm_client import LLMClient, get_client
 from app.review.reviewer import review
@@ -115,11 +128,16 @@ def run_snippet_demo(
 def main() -> None:
     try:
         from dotenv import load_dotenv
-        load_dotenv()
+        _env = Path(__file__).resolve().parent / ".env"
+        if _env.is_file():
+            load_dotenv(dotenv_path=_env, override=True)
+        else:
+            load_dotenv(override=True)
     except ImportError:
         pass
 
-    active_provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
+    raw_provider = os.getenv("LLM_PROVIDER")
+    active_provider = raw_provider.strip().lower() if raw_provider else "mock"
 
     print("=" * 80)
     print("  CODEINSIGHT AI - AUTOMATED PR CODE REVIEWER DEMO")

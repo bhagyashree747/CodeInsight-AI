@@ -530,8 +530,13 @@ def get_client(provider: str | None = None) -> LLMClient:
     """Factory creating an LLMClient instance based on environment variables or explicit provider."""
     # Attempt to load .env file if python-dotenv is available
     try:
+        from pathlib import Path
         from dotenv import load_dotenv
-        load_dotenv()
+        _env = Path(__file__).resolve().parent.parent.parent / ".env"
+        if _env.is_file():
+            load_dotenv(dotenv_path=_env)
+        else:
+            load_dotenv()
     except ImportError:
         pass
 
