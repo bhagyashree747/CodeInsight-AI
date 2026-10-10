@@ -4,7 +4,9 @@ from abc import ABC, abstractmethod
 import json
 import logging
 import os
+import random
 import re
+import time
 from typing import Any
 import httpx
 
@@ -352,6 +354,7 @@ class OpenAICompatLLMClient(LLMClient):
         api_key: str | None = None,
         model: str | None = None,
         timeout: float | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self.base_url = (base_url or os.getenv("LLM_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")).strip()
         self.api_key = (api_key or os.getenv("LLM_API_KEY", "")).strip()
@@ -368,11 +371,20 @@ class OpenAICompatLLMClient(LLMClient):
         else:
             self.timeout = 30.0
 
+        self._http_client = http_client
+        self.last_error: str | None = None
+
     def _resolve_endpoint(self) -> str:
         clean_url = self.base_url.rstrip("/")
         if clean_url.endswith("/chat/completions"):
             return clean_url
         return f"{clean_url}/chat/completions"
+
+    def _sanitize(self, text: str) -> str:
+        """Strip any accidental occurrence of api_key from error text or log messages."""
+        if self.api_key and self.api_key in text:
+            return text.replace(self.api_key, "***")
+        return text
 
     def complete(self, system: str, user: str) -> str:
         if not self.api_key:
@@ -404,26 +416,76 @@ class OpenAICompatLLMClient(LLMClient):
             masked_key,
         )
 
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                response = client.post(endpoint, json=payload, headers=headers)
+        max_retries = 4
+        delays = [2.0, 4.0, 8.0, 16.0]
+        retryable_status_codes = {429, 500, 502, 503, 504}
+
+        for attempt in range(max_retries + 1):
+            try:
+                if self._http_client is not None:
+                    response = self._http_client.post(endpoint, json=payload, headers=headers)
+                else:
+                    with httpx.Client(timeout=self.timeout) as client:
+                        response = client.post(endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 data = response.json()
                 content = data["choices"][0]["message"]["content"]
                 if not isinstance(content, str):
                     content = str(content)
                 return content
-        except httpx.HTTPStatusError as err:
-            status_code = err.response.status_code
-            # Sanitize error message to avoid echoing headers or tokens
-            error_text = err.response.text
-            logger.error("HTTP error %s from LLM endpoint %s", status_code, endpoint)
-            raise RuntimeError(
-                f"LLM API request failed with HTTP {status_code}: {error_text}"
-            ) from None
-        except httpx.RequestError as err:
-            logger.error("Network error when connecting to LLM endpoint %s: %s", endpoint, err)
-            raise RuntimeError(f"LLM network error: {err}") from None
+
+            except httpx.HTTPStatusError as err:
+                status_code = err.response.status_code
+                error_text = self._sanitize(err.response.text)
+                logger.error("HTTP error %s from LLM endpoint %s", status_code, endpoint)
+
+                # Do not retry on permanent errors (400, 401, 403, 404) or any non-retryable status
+                if status_code not in retryable_status_codes:
+                    self.last_error = f"LLM API request failed with HTTP {status_code}: {error_text}"
+                    raise RuntimeError(self.last_error) from None
+
+                if attempt >= max_retries:
+                    self.last_error = f"LLM API request failed with HTTP {status_code} after {max_retries} retries: {error_text}"
+                    raise RuntimeError(self.last_error) from None
+
+                jitter = random.uniform(0.1, 0.5)
+                delay = delays[attempt] + jitter
+                retry_msg = f"[Retry {attempt + 1}/{max_retries}] HTTP {status_code} received from LLM endpoint. Retrying in {delay:.2f}s..."
+                print(retry_msg, flush=True)
+                logger.warning(
+                    "[Retry %d/%d] HTTP %s from LLM endpoint. Retrying in %.2fs...",
+                    attempt + 1,
+                    max_retries,
+                    status_code,
+                    delay,
+                )
+                time.sleep(delay)
+
+            except httpx.TimeoutException as err:
+                sanitized_err = self._sanitize(str(err))
+                logger.error("Timeout connecting to LLM endpoint %s: %s", endpoint, sanitized_err)
+
+                if attempt >= max_retries:
+                    self.last_error = f"LLM request timed out after {max_retries} retries: {sanitized_err}"
+                    raise RuntimeError(self.last_error) from None
+
+                jitter = random.uniform(0.1, 0.5)
+                delay = delays[attempt] + jitter
+                retry_msg = f"[Retry {attempt + 1}/{max_retries}] Request timed out for LLM endpoint. Retrying in {delay:.2f}s..."
+                print(retry_msg, flush=True)
+                logger.warning(
+                    "[Retry %d/%d] Request timed out for LLM endpoint. Retrying in %.2fs...",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                )
+                time.sleep(delay)
+
+            except httpx.RequestError as err:
+                sanitized_err = self._sanitize(str(err))
+                logger.error("Network error when connecting to LLM endpoint %s: %s", endpoint, sanitized_err)
+                self.last_error = f"LLM network error: {sanitized_err}"
+                raise RuntimeError(self.last_error) from None
 
 
 class OllamaLLMClient(LLMClient):

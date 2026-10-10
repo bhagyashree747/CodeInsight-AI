@@ -12,7 +12,23 @@ Review -> Relevance Filter -> Top Finding Selection -> Patch Generation -> Diff 
 import os
 from app.relevance.filter import filter_findings
 from app.repair.patch_generator import apply_patch, generate_patch
+from app.review.llm_client import LLMClient, get_client
 from app.review.reviewer import review
+
+
+class TrackingClient(LLMClient):
+    """Wrapper around LLMClient that records the last error if complete() fails."""
+
+    def __init__(self, inner: LLMClient) -> None:
+        self.inner = inner
+        self.last_error: str | None = None
+
+    def complete(self, system: str, user: str) -> str:
+        try:
+            return self.inner.complete(system=system, user=user)
+        except Exception as err:
+            self.last_error = str(err)
+            raise
 
 
 def print_banner(title: str) -> None:
@@ -34,12 +50,23 @@ def run_repair_demo(
     filename: str,
     code: str,
     changed_lines: set[int] | None = None,
-) -> None:
+) -> bool:
     print_banner(f"Repair Demo: {name} ({filename})")
     display_code(code)
 
+    tracker = TrackingClient(get_client())
+
     print("[Step 1] Running Automated Review...")
-    raw_findings = review(context=code, file=filename, changed_lines=changed_lines)
+    try:
+        raw_findings = review(context=code, file=filename, changed_lines=changed_lines, client=tracker)
+    except Exception as err:
+        print(f"\nFAILED: {err}")
+        return False
+
+    if tracker.last_error is not None:
+        print(f"\nFAILED: {tracker.last_error}")
+        return False
+
     print(f"-> Generated {len(raw_findings)} raw finding(s).")
 
     print("\n[Step 2] Filtering Relevance & Scoring Findings...")
@@ -48,7 +75,7 @@ def run_repair_demo(
 
     if not filter_result.kept:
         print("-> No actionable findings kept. Skipping patch generation.")
-        return
+        return True
 
     top_item = filter_result.kept[0]
     top_finding = top_item.finding
@@ -60,7 +87,15 @@ def run_repair_demo(
     print(f"  Fix Hint:    {top_finding.suggested_fix_hint}")
 
     print("\n[Step 4] Generating Patch via LLM...")
-    patch = generate_patch(code=code, finding=top_finding)
+    try:
+        patch = generate_patch(code=code, finding=top_finding, client=tracker)
+    except Exception as err:
+        print(f"\nFAILED: {err}")
+        return False
+
+    if tracker.last_error is not None:
+        print(f"\nFAILED: {tracker.last_error}")
+        return False
 
     print("\n[Step 5] Generated Unified Diff:")
     print("-" * 60)
@@ -88,16 +123,21 @@ def run_repair_demo(
                 os.remove(apply_res.patched_path)
         except OSError:
             pass
+    return True
 
 
 def main() -> None:
-    # Set default mock provider if not configured
-    if "LLM_PROVIDER" not in os.environ:
-        os.environ["LLM_PROVIDER"] = "mock"
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    active_provider = os.getenv("LLM_PROVIDER", "mock").strip().lower()
 
     print("=" * 80)
     print("  CODEINSIGHT AI - AUTOMATED CODE REPAIR & PATCH DEMO")
-    print(f"  Active LLM Provider: {os.environ.get('LLM_PROVIDER', 'mock')}")
+    print(f"  Active LLM Provider: {active_provider}")
     print("=" * 80)
 
     # Buggy Snippet 1: SQL Injection
@@ -122,29 +162,28 @@ def main() -> None:
     return tags
 '''
 
-    run_repair_demo(
-        name="SQL Injection Vulnerability",
-        filename="app/db/users.py",
-        code=snippet_sql,
-        changed_lines={1, 2, 3, 4},
-    )
+    cases = [
+        ("SQL Injection Vulnerability", "app/db/users.py", snippet_sql, {1, 2, 3, 4}),
+        ("Division by Zero on Empty Input", "app/metrics/latency.py", snippet_div_zero, {2, 3, 4}),
+        ("Mutable Default Argument", "app/events/logger.py", snippet_mutable_default, {1, 2, 3}),
+    ]
 
-    run_repair_demo(
-        name="Division by Zero on Empty Input",
-        filename="app/metrics/latency.py",
-        code=snippet_div_zero,
-        changed_lines={2, 3, 4},
-    )
-
-    run_repair_demo(
-        name="Mutable Default Argument",
-        filename="app/events/logger.py",
-        code=snippet_mutable_default,
-        changed_lines={1, 2, 3},
-    )
+    all_succeeded = True
+    for name, filename, code, changed_lines in cases:
+        ok = run_repair_demo(
+            name=name,
+            filename=filename,
+            code=code,
+            changed_lines=changed_lines,
+        )
+        if not ok:
+            all_succeeded = False
 
     print("\n" + "=" * 80)
-    print("  PATCH DEMO COMPLETE - ALL 3 BUGGY SNIPPETS REPAIRED SUCCESSFULLY")
+    if all_succeeded:
+        print("  PATCH DEMO COMPLETE - ALL 3 BUGGY SNIPPETS EXECUTED SUCCESSFULLY")
+    else:
+        print("  PATCH DEMO FINISHED WITH FAILURES")
     print("=" * 80 + "\n")
 
 
