@@ -1,6 +1,7 @@
 """Provider-agnostic LLM client interface and implementations."""
 
 from abc import ABC, abstractmethod
+import json
 import logging
 import os
 import re
@@ -41,8 +42,205 @@ class MockLLMClient(LLMClient):
         if self.default_response is not None:
             return self.default_response
 
+        # Check if this is a repair prompt (contains "fixing ONE issue")
+        if "fixing ONE issue" in system or "fixing ONE issue" in user:
+            return self._generate_realistic_repair(user)
+
         # Realistic canned response generation based on the code in the prompt
         return self._generate_realistic_response(user)
+
+    def _generate_realistic_repair(self, user_prompt: str) -> str:
+        """Inspect the repair user prompt and return realistic fixed code and explanation."""
+        # 1. SQL Injection Case (parameterized query)
+        if (
+            "sql" in user_prompt.lower()
+            or "injection" in user_prompt.lower()
+            or "select" in user_prompt.lower()
+        ):
+            if "fetch_user_record" in user_prompt:
+                fixed_code = '''def fetch_user_record(cursor, username: str):
+    # Parameterized query to prevent SQL injection
+    query = "SELECT * FROM users WHERE username = %s"
+    cursor.execute(query, (username,))
+    return cursor.fetchone()
+'''
+            else:
+                code_match = re.search(
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    user_prompt,
+                    re.DOTALL,
+                )
+                if code_match:
+                    raw_lines = [
+                        re.sub(r"^\s*\d+:\s*", "", l)
+                        for l in code_match.group(1).splitlines()
+                    ]
+                    cleaned = "\n".join(raw_lines)
+                    fixed_code = re.sub(
+                        r'f"SELECT\s+([^"]*?)\{([^}]+)\}([^"]*?)"',
+                        r'"SELECT \1%s\3"',
+                        cleaned,
+                    )
+                    fixed_code = re.sub(
+                        r'cursor\.execute\(([^,)]+)\)',
+                        r'cursor.execute(\1, (username,))',
+                        fixed_code,
+                    )
+                    if not fixed_code.endswith("\n"):
+                        fixed_code += "\n"
+                else:
+                    fixed_code = '''def get_user(cursor, username: str):
+    query = "SELECT * FROM users WHERE username = %s"
+    cursor.execute(query, (username,))
+    return cursor.fetchone()
+'''
+            explanation = "Replaced string-interpolated query with parameterized SQL query placeholders to prevent SQL injection."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # 2. Division by Zero Case (empty-list guard)
+        if (
+            "division" in user_prompt.lower()
+            or "zerodivision" in user_prompt.lower()
+            or "len(" in user_prompt
+        ):
+            has_failure_feedback = (
+                "your last fix failed" in user_prompt.lower()
+                or "[previous attempt failed]" in user_prompt.lower()
+                or "failure reason" in user_prompt.lower()
+                or "failure feedback" in user_prompt.lower()
+                or "syntaxerror" in user_prompt.lower()
+            )
+
+            # On attempt 1 with no feedback, return a deliberately broken patch (syntax error) for demo retry testing
+            if not has_failure_feedback:
+                if "compute_average_latency" in user_prompt:
+                    broken_code = '''def compute_average_latency(measurements: list[float]) -> float:
+    # Deliberate syntax error: missing colon
+    if not measurements return 0.0
+    total = sum(measurements)
+    return total / len(measurements)
+'''
+                elif "calculate_average" in user_prompt:
+                    broken_code = '''def calculate_average(scores: list[float]) -> float:
+    if not scores return 0.0
+    total = sum(scores)
+    return total / len(scores)
+'''
+                else:
+                    broken_code = '''def compute_average(items: list[float]) -> float:
+    if not items return 0.0
+    total = sum(items)
+    return total / len(items)
+'''
+                explanation = "Attempted empty-collection guard with syntax error for verification retry testing."
+                return json.dumps({"fixed_code": broken_code, "explanation": explanation}, indent=2)
+
+            # On retry with feedback, return valid corrected code
+            if "compute_average_latency" in user_prompt:
+                fixed_code = '''def compute_average_latency(measurements: list[float]) -> float:
+    # Guard against division by zero on empty collection
+    if not measurements:
+        return 0.0
+    total = sum(measurements)
+    return total / len(measurements)
+'''
+            elif "calculate_average" in user_prompt:
+                fixed_code = '''def calculate_average(scores: list[float]) -> float:
+    if not scores:
+        return 0.0
+    total = sum(scores)
+    return total / len(scores)
+'''
+            else:
+                code_match = re.search(
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    user_prompt,
+                    re.DOTALL,
+                )
+                if code_match:
+                    raw_lines = [
+                        re.sub(r"^\s*\d+:\s*", "", l)
+                        for l in code_match.group(1).splitlines()
+                    ]
+                    lines = []
+                    inserted = False
+                    for line in raw_lines:
+                        if ("total = sum(" in line or "return total / len(" in line) and not inserted:
+                            indent = " " * (len(line) - len(line.lstrip()))
+                            lines.append(f"{indent}if not items:")
+                            lines.append(f"{indent}    return 0.0")
+                            inserted = True
+                        lines.append(line)
+                    fixed_code = "\n".join(lines) + "\n"
+                else:
+                    fixed_code = '''def compute_average(items: list[float]) -> float:
+    if not items:
+        return 0.0
+    total = sum(items)
+    return total / len(items)
+'''
+            explanation = "Added an empty-collection guard before division to prevent ZeroDivisionError."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # 3. Mutable Default Argument Case (None default)
+        if (
+            "mutable" in user_prompt.lower()
+            or "default" in user_prompt.lower()
+            or "= []" in user_prompt
+            or "=[]" in user_prompt
+        ):
+            if "register_event" in user_prompt:
+                fixed_code = '''def register_event(event_name: str, tags: list | None = None):
+    # Safe default handling with None
+    if tags is None:
+        tags = []
+    tags.append(event_name)
+    return tags
+'''
+            elif "add_item" in user_prompt:
+                fixed_code = '''def add_item(item, items: list | None = None):
+    if items is None:
+        items = []
+    items.append(item)
+    return items
+'''
+            else:
+                code_match = re.search(
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    user_prompt,
+                    re.DOTALL,
+                )
+                if code_match:
+                    raw_lines = [
+                        re.sub(r"^\s*\d+:\s*", "", l)
+                        for l in code_match.group(1).splitlines()
+                    ]
+                    lines = []
+                    for line in raw_lines:
+                        if "def " in line and "= []" in line:
+                            lines.append(line.replace("= []", "= None"))
+                            lines.append("    if tags is None:")
+                            lines.append("        tags = []")
+                        else:
+                            lines.append(line)
+                    fixed_code = "\n".join(lines) + "\n"
+                else:
+                    fixed_code = '''def func(item, items=None):
+    if items is None:
+        items = []
+    items.append(item)
+    return items
+'''
+            explanation = "Replaced mutable default argument with None and initialized a new list within function body."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # Default fallback
+        return json.dumps(
+            {
+                "fixed_code": "# Default fix\n",
+                "explanation": "Applied automated repair.",
+            }
+        )
 
     def _generate_realistic_response(self, user_prompt: str) -> str:
         """Inspect the user prompt to detect known buggy patterns and return realistic findings."""

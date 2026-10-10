@@ -280,9 +280,15 @@ def test_out_of_range_line_numbers_are_dropped():
 # --- LLM Client Tests ---
 
 def test_get_client_mock_default(monkeypatch):
+    # Verify that get_client defaults to MockLLMClient when LLM_PROVIDER is unset in the environment
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     client = get_client()
     assert isinstance(client, MockLLMClient)
+
+    # Verify that get_client returns MockLLMClient when LLM_PROVIDER is explicitly 'mock'
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+    client_explicit = get_client()
+    assert isinstance(client_explicit, MockLLMClient)
 
 
 def test_openai_compat_missing_key_raises(monkeypatch):
