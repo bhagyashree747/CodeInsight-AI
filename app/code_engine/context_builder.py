@@ -9,6 +9,7 @@ MODULE_WINDOW = 5        # lines of padding around changes that are outside any 
 NON_PY_WINDOW = 15       # padding for non-Python files at "function" level
 MAX_FILE_CHARS = 40000   # files bigger than this get trimmed at "file" level
 TRIM_RADIUS = 200        # padding used when trimming a big file
+DEFAULT_MAX_FILES = 30   # PRs with more changed files than this get cut off
 
 
 def _number(lines, start, end):
@@ -124,8 +125,12 @@ def build_file_context(changed_file, file_diff, source, level):
     }
 
 
-def build_context(pr, level="function", client=None):
-    """Context for a whole PR. Input: the dict from fetch_pull_request()."""
+def build_context(pr, level="function", client=None, max_files=DEFAULT_MAX_FILES):
+    """Context for a whole PR. Input: the dict from fetch_pull_request().
+
+    One bad file never crashes the whole PR: if anything goes wrong for a file,
+    that file falls back to diff level and the reason goes in its 'note'.
+    max_files=None means no limit."""
     if level not in LEVELS:
         raise ValueError(f"level must be one of {LEVELS}")
 
@@ -133,11 +138,28 @@ def build_context(pr, level="function", client=None):
     diffs = build_file_diffs(pr["changed_files"])
 
     files = []
+    skipped = []
     for changed_file, file_diff in zip(pr["changed_files"], diffs):
-        source = None
-        if level != "diff" and changed_file["status"] != "removed":
-            source = fetch_file_at_head(client, pr, changed_file["filename"])
-        files.append(build_file_context(changed_file, file_diff, source, level))
+        if max_files is not None and len(files) >= max_files:
+            skipped.append(changed_file["filename"])
+            continue
+
+        try:
+            source = None
+            if level != "diff" and changed_file["status"] != "removed":
+                source = fetch_file_at_head(client, pr, changed_file["filename"])
+            file_ctx = build_file_context(changed_file, file_diff, source, level)
+        except Exception as error:
+            file_ctx = build_file_context(changed_file, file_diff, None, "diff")
+            file_ctx["requested_level"] = level
+            file_ctx["note"] = (
+                f"Fell back to diff level after error: {type(error).__name__}: {error}"
+            )
+        files.append(file_ctx)
+
+    text = "\n\n".join(f["text"] for f in files)
+    if skipped:
+        text += f"\n\n(+{len(skipped)} more files not included: {', '.join(skipped)})"
 
     return {
         "repository": pr["repository"],
@@ -145,5 +167,6 @@ def build_context(pr, level="function", client=None):
         "title": pr["title"],
         "level": level,
         "files": files,
-        "text": "\n\n".join(f["text"] for f in files),
+        "skipped_files": skipped,
+        "text": text,
     }
