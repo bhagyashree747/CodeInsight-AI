@@ -7,12 +7,6 @@ from pathlib import Path
 def check_python_syntax(target: str | Path) -> dict:
     """
     Check Python syntax in a single file or recursively in a directory.
-
-    Args:
-        target: Path to a Python file or directory.
-
-    Returns:
-        A dictionary containing the result and any syntax errors.
     """
     path = Path(target).resolve()
 
@@ -51,26 +45,25 @@ def check_python_syntax(target: str | Path) -> dict:
 
     for file in python_files:
         try:
-            source = file.read_text(encoding="utf-8")
+            # utf-8-sig handles files with or without a UTF-8 BOM.
+            source = file.read_text(encoding="utf-8-sig")
             ast.parse(source, filename=str(file))
+
         except SyntaxError as exc:
-            errors.append(
-                {
-                    "file": str(file),
-                    "line": exc.lineno,
-                    "column": exc.offset,
-                    "message": exc.msg,
-                }
-            )
+            errors.append({
+                "file": str(file),
+                "line": exc.lineno,
+                "column": exc.offset,
+                "message": exc.msg,
+            })
+
         except (OSError, UnicodeError) as exc:
-            errors.append(
-                {
-                    "file": str(file),
-                    "line": None,
-                    "column": None,
-                    "message": f"Could not read file: {exc}",
-                }
-            )
+            errors.append({
+                "file": str(file),
+                "line": None,
+                "column": None,
+                "message": f"Could not read file: {exc}",
+            })
 
     return {
         "passed": len(errors) == 0,
