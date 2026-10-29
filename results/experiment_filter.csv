@@ -1,0 +1,7 @@
+provider,id,category,known_bug_line,total_findings,kept_on,kept_off,precision_on,recall_on,precision_off,recall_off
+mock,sql_injection,security,5,2,1,2,1.0,1.0,0.5,1.0
+mock,division_by_zero,bug,3,2,2,2,1.0,1.0,1.0,1.0
+mock,mutable_default,bug,1,2,1,2,1.0,1.0,1.0,1.0
+mock,clean_factorial,clean,,0,0,0,,,,
+mock,clean_binary_search,clean,,2,2,2,,,,
+mock,clean_word_count,clean,,0,0,0,,,,
