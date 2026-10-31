@@ -63,10 +63,11 @@ def build_user_prompt(
     context: str,
     file: str = "snippet.py",
     changed_lines: Iterable[int] | None = None,
+    start_line: int = 1,
 ) -> str:
     """Build user prompt with line-numbered code and diff change information."""
     lines = context.splitlines()
-    numbered_lines = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
+    numbered_lines = [f"{i + start_line}: {line}" for i, line in enumerate(lines)]
     code_with_lines = "\n".join(numbered_lines) if numbered_lines else "(empty file)"
 
     changed_info = ""

@@ -61,6 +61,7 @@ def run_pipeline(
     verifier: Verifier | None = None,
     max_attempts: int = 3,
     test_code: str | None = None,
+    functions: list[dict[str, Any]] | list[Any] | None = None,
 ) -> dict[str, Any]:
     """Run the full review → filter → repair pipeline on a code snippet.
 
@@ -76,6 +77,9 @@ def run_pipeline(
         max_attempts: Maximum repair attempts per finding.
         test_code: Optional test code string to pass to ``LocalVerifier``.
             Ignored when a custom *verifier* is provided.
+        functions: Optional list of function dicts or objects (name, start_line, end_line,
+            text, and optional too_large). When supplied, review and repair run at the
+            function level, splicing verified fixes into the full file.
 
     Returns:
         A JSON-serialisable dict with keys:
@@ -104,12 +108,38 @@ def run_pipeline(
     # ------------------------------------------------------------------
     findings: list[Finding] = []
     review_error: str | None = None
-    try:
-        findings = review(context=code, file=file, changed_lines=changed_lines, client=client)
-    except Exception as err:
-        review_error = f"Review stage raised an unexpected exception: {err}\n{traceback.format_exc()}"
-        logger.error(review_error)
-        # Continue with zero findings rather than crashing.
+    if functions is not None:
+        try:
+            for func_item in functions:
+                f_name = func_item["name"] if isinstance(func_item, dict) else func_item.name
+                f_start = int(func_item["start_line"] if isinstance(func_item, dict) else func_item.start_line)
+                f_end = int(func_item["end_line"] if isinstance(func_item, dict) else func_item.end_line)
+                f_text = str(func_item["text"] if isinstance(func_item, dict) else func_item.text)
+
+                func_findings = review(
+                    context=f_text,
+                    file=file,
+                    changed_lines=changed_lines,
+                    client=client,
+                    start_line=f_start,
+                )
+                findings.extend(func_findings)
+        except Exception as err:
+            review_error = (
+                f"Review stage raised an unexpected exception: {err}\n"
+                f"{traceback.format_exc()}"
+            )
+            logger.error(review_error)
+    else:
+        try:
+            findings = review(context=code, file=file, changed_lines=changed_lines, client=client)
+        except Exception as err:
+            review_error = (
+                f"Review stage raised an unexpected exception: {err}\n"
+                f"{traceback.format_exc()}"
+            )
+            logger.error(review_error)
+            # Continue with zero findings rather than crashing.
 
     # ------------------------------------------------------------------
     # Stage 2: Filter
@@ -142,12 +172,14 @@ def run_pipeline(
             verifier=verifier,
             client=client,
             max_attempts=max_attempts,
+            functions=functions,
         )
         try:
             outcomes = agent.repair_all(
                 code=code,
                 scored_findings=filter_result.kept,
                 file_path=file,
+                functions=functions,
             )
         except Exception as err:
             repair_error = (
@@ -158,12 +190,14 @@ def run_pipeline(
             outcomes = []
 
         for sf, outcome in zip(filter_result.kept, outcomes):
-            # Extract diff / explanation from final patch (may be None on failure)
+            # Extract diff / explanation from final patch (may be None on failure or skip)
             diff_text = ""
             explanation = ""
             verification_stage = "none"
 
-            if outcome.final_patch is not None:
+            if outcome.status == "skipped":
+                explanation = "repair skipped: function too large"
+            elif outcome.final_patch is not None:
                 diff_text = outcome.final_patch.diff or ""
                 explanation = outcome.final_patch.explanation or ""
 
@@ -190,6 +224,7 @@ def run_pipeline(
     verified_count = sum(1 for r in repair_outcomes_raw if r["status"] == "verified")
     failed_count = sum(1 for r in repair_outcomes_raw if r["status"] == "failed")
     retried_count = sum(1 for r in repair_outcomes_raw if r["attempts"] > 1)
+    skipped_count = sum(1 for r in repair_outcomes_raw if r["status"] == "skipped")
 
     # Pipeline-level errors summary
     pipeline_errors: list[str] = []
@@ -199,6 +234,14 @@ def run_pipeline(
         pipeline_errors.append(filter_error)
     if repair_error:
         pipeline_errors.append(repair_error)
+
+    summary: dict[str, int] = {
+        "verified": verified_count,
+        "failed": failed_count,
+        "retried": retried_count,
+    }
+    if skipped_count > 0:
+        summary["skipped"] = skipped_count
 
     result: dict[str, Any] = {
         "file": file,
@@ -223,12 +266,13 @@ def run_pipeline(
             for df in filter_result.discarded
         ],
         "repairs": repair_outcomes_raw,
-        "summary": {
-            "verified": verified_count,
-            "failed": failed_count,
-            "retried": retried_count,
-        },
+        "summary": summary,
     }
+
+    if pipeline_errors:
+        result["pipeline_errors"] = pipeline_errors
+
+    return result
 
     if pipeline_errors:
         result["pipeline_errors"] = pipeline_errors

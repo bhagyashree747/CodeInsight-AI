@@ -44,12 +44,135 @@ class MockLLMClient(LLMClient):
         if self.default_response is not None:
             return self.default_response
 
+        # Check if this is a function-level repair prompt
+        if (
+            "in a function" in system
+            or "Function code to fix:" in user
+            or "corrected function" in user
+            or "corrected function" in system
+        ):
+            return self._generate_realistic_function_repair(user)
+
         # Check if this is a repair prompt (contains "fixing ONE issue")
         if "fixing ONE issue" in system or "fixing ONE issue" in user:
             return self._generate_realistic_repair(user)
 
         # Realistic canned response generation based on the code in the prompt
         return self._generate_realistic_response(user)
+
+    def _generate_realistic_function_repair(self, user_prompt: str) -> str:
+        """Inspect the function repair prompt and return realistic corrected function."""
+        func_match = re.search(
+            r"Function code to fix:\s*\n(.*?)\n\s*Issue to fix:",
+            user_prompt,
+            re.DOTALL,
+        )
+        if func_match:
+            func_code = func_match.group(1).rstrip()
+        else:
+            func_code = user_prompt.strip()
+
+        # Determine function name and base indentation
+        name_match = re.search(r"def\s+([a-zA-Z0-9_]+)\s*\(", func_code)
+        func_name = name_match.group(1) if name_match else "func"
+
+        base_indent = ""
+        for line in func_code.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("def ") or stripped.startswith("async def "):
+                base_indent = line[: len(line) - len(stripped)]
+                break
+
+        inner_indent = base_indent + "    "
+
+        # 1. SQL Injection Case
+        if (
+            "sql" in user_prompt.lower()
+            or "injection" in user_prompt.lower()
+            or "select" in user_prompt.lower()
+        ):
+            lines = func_code.splitlines()
+            fixed_lines = []
+            param = "username"
+            if "username" in func_code:
+                param = "username"
+            elif "user" in func_code:
+                param = "user"
+
+            for line in lines:
+                if 'f"SELECT' in line or "f'SELECT" in line:
+                    line = re.sub(
+                        r'f["\']SELECT\s+([^"\']*?)\{([^}]+)\}([^"\']*?)["\']',
+                        r'"SELECT \1?\3"',
+                        line,
+                    )
+                if ".execute(query)" in line:
+                    line = line.replace(".execute(query)", f".execute(query, ({param},))")
+                fixed_lines.append(line)
+            fixed_code = "\n".join(fixed_lines) + "\n"
+            explanation = "Parameterized query to prevent SQL injection."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # 2. Division by zero / Average
+        if (
+            "division" in user_prompt.lower()
+            or "zerodivision" in user_prompt.lower()
+            or "len(" in user_prompt
+            or "average" in user_prompt.lower()
+        ):
+            param_match = re.search(
+                r"def\s+[a-zA-Z0-9_]+\s*\(\s*(?:self\s*,\s*)?([a-zA-Z0-9_]+)",
+                func_code,
+            )
+            param_name = param_match.group(1) if param_match else "values"
+
+            lines = func_code.splitlines()
+            new_lines = []
+            inserted = False
+            for line in lines:
+                stripped = line.strip()
+                if (
+                    stripped.startswith("total =")
+                    or "return total /" in stripped
+                    or "return (total /" in stripped
+                    or "return sum(" in stripped
+                ) and not inserted:
+                    new_lines.append(f"{inner_indent}if not {param_name}:")
+                    new_lines.append(f"{inner_indent}    return 0.0")
+                    inserted = True
+                new_lines.append(line)
+            fixed_code = "\n".join(new_lines) + "\n"
+            explanation = "Added empty collection check before division to prevent ZeroDivisionError."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # 3. Mutable default argument
+        if (
+            "mutable" in user_prompt.lower()
+            or "default" in user_prompt.lower()
+            or "= []" in user_prompt
+            or "=[]" in user_prompt
+        ):
+            lines = func_code.splitlines()
+            new_lines = []
+            param_name = "collection"
+            for line in lines:
+                if "def " in line and ("= []" in line or "=[]" in line):
+                    match = re.search(r"([a-zA-Z0-9_]+)\s*(?::\s*[^=]+)?=\s*\[\]", line)
+                    if match:
+                        param_name = match.group(1)
+                    line = re.sub(r"=\s*\[\]", "= None", line)
+                    new_lines.append(line)
+                    new_lines.append(f"{inner_indent}if {param_name} is None:")
+                    new_lines.append(f"{inner_indent}    {param_name} = []")
+                else:
+                    new_lines.append(line)
+            fixed_code = "\n".join(new_lines) + "\n"
+            explanation = "Replaced mutable default with None and initialized in body."
+            return json.dumps({"fixed_code": fixed_code, "explanation": explanation}, indent=2)
+
+        # Fallback
+        fixed_code = f"# Repaired {func_name}\n" + func_code + "\n"
+        return json.dumps({"fixed_code": fixed_code, "explanation": f"Repaired {func_name}."}, indent=2)
 
     def _generate_realistic_repair(self, user_prompt: str) -> str:
         """Inspect the repair user prompt and return realistic fixed code and explanation."""

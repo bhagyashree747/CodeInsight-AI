@@ -13,6 +13,7 @@ class Patch(BaseModel):
     explanation: str = Field(..., description="Brief explanation of the changes made")
     diff: str = Field(..., description="Unified diff between original and fixed code")
     attempt: int = Field(default=1, ge=1, description="Repair attempt iteration number")
+    fixed_function: str | None = Field(default=None, description="The corrected function text if function-level repair")
 
 
 class ApplyResult(BaseModel):

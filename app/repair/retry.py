@@ -1,10 +1,10 @@
 """Retry orchestration for automated code repair with verification feedback."""
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 
-from app.repair.patch_generator import PatchGenerationError, generate_patch
+from app.repair.patch_generator import PatchGenerationError, generate_function_patch, generate_patch
 from app.repair.schema import Patch
 from app.repair.verifier_interface import VerificationResult, Verifier
 from app.review.llm_client import LLMClient, get_client
@@ -25,8 +25,8 @@ class RepairAttempt(BaseModel):
 class RepairOutcome(BaseModel):
     """Aggregate outcome of a multi-attempt repair loop."""
 
-    status: Literal["verified", "failed"] = Field(
-        ..., description="Repair status: 'verified' or 'failed'"
+    status: Literal["verified", "failed", "skipped"] = Field(
+        ..., description="Repair status: 'verified', 'failed', or 'skipped'"
     )
     attempts: list[RepairAttempt] = Field(
         default_factory=list, description="Chronological record of repair attempts"
@@ -49,6 +49,7 @@ def repair_with_retries(
     client: LLMClient | None = None,
     max_attempts: int = 3,
     file_path: str = "snippet.py",
+    function_info: dict[str, Any] | Any | None = None,
 ) -> RepairOutcome:
     """Attempt to repair a finding in a loop, feeding verification failures back to the LLM.
 
@@ -59,12 +60,29 @@ def repair_with_retries(
         client: Optional LLMClient. Defaults to get_client().
         max_attempts: Maximum number of repair attempts before giving up (default 3).
         file_path: File path of the snippet being verified.
+        function_info: Optional function dict or object for function-level repair.
 
     Returns:
-        RepairOutcome with status ('verified' or 'failed') and full attempt history.
+        RepairOutcome with status ('verified', 'failed', or 'skipped') and full attempt history.
     """
     if client is None:
         client = get_client()
+
+    if function_info is not None:
+        too_large = (
+            function_info.get("too_large", False)
+            if isinstance(function_info, dict)
+            else getattr(function_info, "too_large", False)
+        )
+        if too_large:
+            logger.info("Function marked as too_large; skipping repair.")
+            return RepairOutcome(
+                status="skipped",
+                attempts=[],
+                final_patch=None,
+                final_code=code,
+                total_attempts=0,
+            )
 
     attempts: list[RepairAttempt] = []
     previous_patch: Patch | None = None
@@ -73,14 +91,25 @@ def repair_with_retries(
     for attempt in range(1, max_attempts + 1):
         # Step 1: Generate patch (handling PatchGenerationError as a failed attempt)
         try:
-            patch = generate_patch(
-                code=code,
-                finding=finding,
-                client=client,
-                previous_patch=previous_patch,
-                failure_feedback=failure_feedback,
-                attempt=attempt,
-            )
+            if function_info is not None:
+                patch = generate_function_patch(
+                    full_code=code,
+                    function_info=function_info,
+                    finding=finding,
+                    client=client,
+                    previous_patch=previous_patch,
+                    failure_feedback=failure_feedback,
+                    attempt=attempt,
+                )
+            else:
+                patch = generate_patch(
+                    code=code,
+                    finding=finding,
+                    client=client,
+                    previous_patch=previous_patch,
+                    failure_feedback=failure_feedback,
+                    attempt=attempt,
+                )
         except PatchGenerationError as err:
             logger.warning("Attempt %d failed patch generation: %s", attempt, err)
             v_res = VerificationResult(

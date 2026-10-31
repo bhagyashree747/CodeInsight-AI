@@ -75,6 +75,7 @@ def review(
     file: str = "snippet.py",
     changed_lines: set[int] | None = None,
     client: LLMClient | None = None,
+    start_line: int = 1,
 ) -> list[Finding]:
     """Review code context using an LLM client and return validated findings.
 
@@ -83,15 +84,22 @@ def review(
         file: Path or filename of the code being reviewed.
         changed_lines: Optional set of 1-indexed line numbers modified in PR diff.
         client: Optional LLMClient instance. Defaults to get_client().
+        start_line: 1-indexed starting line number of context within the file (default 1).
 
     Returns:
         A list of validated Finding objects within the valid line range of the code.
     """
     total_lines = len(context.splitlines())
+    end_line = start_line + total_lines - 1 if total_lines > 0 else start_line
     if client is None:
         client = get_client()
 
-    user_prompt = build_user_prompt(context=context, file=file, changed_lines=changed_lines)
+    user_prompt = build_user_prompt(
+        context=context,
+        file=file,
+        changed_lines=changed_lines,
+        start_line=start_line,
+    )
 
     # Step 1: Initial LLM call
     try:
@@ -130,19 +138,28 @@ def review(
     if review_result is None:
         return []
 
-    # Step 3: Filter findings whose line numbers fall outside valid code range [1..total_lines]
+    # Step 3: Filter findings whose line numbers fall outside valid code range
     valid_findings: list[Finding] = []
     for finding in review_result.findings:
-        if 1 <= finding.line <= total_lines:
-            # Normalize file name if finding has generic or mismatched name
+        # Check if finding is already in absolute file coordinates [start_line..end_line]
+        if start_line <= finding.line <= end_line:
             if not finding.file or finding.file == "snippet.py":
                 finding.file = file
             valid_findings.append(finding)
+        # Check if finding was returned relative to function snippet [1..total_lines] when start_line > 1
+        elif start_line > 1 and 1 <= finding.line <= total_lines:
+            adjusted_line = start_line + finding.line - 1
+            if start_line <= adjusted_line <= end_line:
+                finding.line = adjusted_line
+                if not finding.file or finding.file == "snippet.py":
+                    finding.file = file
+                valid_findings.append(finding)
         else:
             logger.warning(
-                "Dropping finding on line %d: outside valid range 1..%d for file '%s'",
+                "Dropping finding on line %d: outside valid range %d..%d for file '%s'",
                 finding.line,
-                total_lines,
+                start_line,
+                end_line,
                 file,
             )
 
