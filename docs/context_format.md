@@ -78,3 +78,36 @@ Code in `function` and `file` levels has line numbers in front (`2724: code here
 - Deleted files, binary files, and pure renames always come back at `diff` level, with a `note`.
 - A function-level change at the top of a file (imports, constants) comes back as a `window` unit, not a function.
 - Errors for one file never crash the whole PR. Check `note` on each file.
+
+## get_review_inputs (for Member 1)
+
+```python
+from app.code_engine.interface import get_review_inputs
+files = get_review_inputs("https://github.com/psf/requests/pull/7553")
+```
+
+Returns a list with one dict per changed file (max 5 files, 12,000 chars of text each).
+
+| field | meaning |
+|---|---|
+| `file` | path in the repo |
+| `text` | the NEW version of the file, no line numbers. If `truncated`, a window of it. |
+| `changed_lines` | changed line numbers (original file numbering) |
+| `language` | python, yaml, etc. |
+| `truncated` | True if `text` is only a window of the file |
+| `functions` | the functions that contain a changed line (Python only), see below |
+| `skipped_functions` | names of changed functions left out because they were over 12,000 chars |
+| `start_line`, `end_line` | which lines of the original file `text` covers |
+| `skipped`, `skip_reason` | files that were left out (deleted, over the file limit, unfetchable) |
+
+Each item in `functions`:
+
+| field | meaning |
+|---|---|
+| `name` | function name |
+| `start_line`, `end_line` | lines in the ORIGINAL file (start includes `@decorators`) |
+| `text` | the whole function, plain code with original indentation, no line numbers |
+| `class` | enclosing class name, or null |
+| `changed_lines` | which changed lines fall inside this function |
+
+`functions` is always complete, even when the file `text` is truncated. A change outside any function (imports, constants) produces no entry.
