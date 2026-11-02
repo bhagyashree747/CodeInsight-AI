@@ -50,6 +50,7 @@ def repair_with_retries(
     max_attempts: int = 3,
     file_path: str = "snippet.py",
     function_info: dict[str, Any] | Any | None = None,
+    extra_context: str | None = None,
 ) -> RepairOutcome:
     """Attempt to repair a finding in a loop, feeding verification failures back to the LLM.
 
@@ -61,6 +62,7 @@ def repair_with_retries(
         max_attempts: Maximum number of repair attempts before giving up (default 3).
         file_path: File path of the snippet being verified.
         function_info: Optional function dict or object for function-level repair.
+        extra_context: Optional supplementary context (read-only).
 
     Returns:
         RepairOutcome with status ('verified', 'failed', or 'skipped') and full attempt history.
@@ -100,6 +102,7 @@ def repair_with_retries(
                     previous_patch=previous_patch,
                     failure_feedback=failure_feedback,
                     attempt=attempt,
+                    extra_context=extra_context,
                 )
             else:
                 patch = generate_patch(
@@ -109,6 +112,7 @@ def repair_with_retries(
                     previous_patch=previous_patch,
                     failure_feedback=failure_feedback,
                     attempt=attempt,
+                    extra_context=extra_context,
                 )
         except PatchGenerationError as err:
             logger.warning("Attempt %d failed patch generation: %s", attempt, err)

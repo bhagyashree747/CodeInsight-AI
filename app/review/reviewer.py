@@ -76,6 +76,8 @@ def review(
     changed_lines: set[int] | None = None,
     client: LLMClient | None = None,
     start_line: int = 1,
+    extra_context: str | None = None,
+    context_level: str | None = None,
 ) -> list[Finding]:
     """Review code context using an LLM client and return validated findings.
 
@@ -85,6 +87,8 @@ def review(
         changed_lines: Optional set of 1-indexed line numbers modified in PR diff.
         client: Optional LLMClient instance. Defaults to get_client().
         start_line: 1-indexed starting line number of context within the file (default 1).
+        extra_context: Optional supplementary context (read-only) for review.
+        context_level: Optional metadata string representing scope of extra_context.
 
     Returns:
         A list of validated Finding objects within the valid line range of the code.
@@ -99,6 +103,7 @@ def review(
         file=file,
         changed_lines=changed_lines,
         start_line=start_line,
+        extra_context=extra_context,
     )
 
     # Step 1: Initial LLM call

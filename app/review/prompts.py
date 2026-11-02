@@ -64,6 +64,7 @@ def build_user_prompt(
     file: str = "snippet.py",
     changed_lines: Iterable[int] | None = None,
     start_line: int = 1,
+    extra_context: str | None = None,
 ) -> str:
     """Build user prompt with line-numbered code and diff change information."""
     lines = context.splitlines()
@@ -81,10 +82,14 @@ def build_user_prompt(
     else:
         changed_info = "All lines are subject to review.\n"
 
+    extra_section = ""
+    if extra_context and extra_context.strip():
+        extra_section = f"\nAdditional context (read-only, do not report issues in it):\n{extra_context.strip()}\n"
+
     return f"""File: {file}
 {changed_info}
 Code to review (line numbers prefixed):
 {code_with_lines}
-
+{extra_section}
 Please analyze the code above and return findings strictly formatted as JSON according to instructions.
 """

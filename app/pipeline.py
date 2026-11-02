@@ -62,6 +62,8 @@ def run_pipeline(
     max_attempts: int = 3,
     test_code: str | None = None,
     functions: list[dict[str, Any]] | list[Any] | None = None,
+    extra_context: str | None = None,
+    context_level: str | None = None,
 ) -> dict[str, Any]:
     """Run the full review → filter → repair pipeline on a code snippet.
 
@@ -80,10 +82,12 @@ def run_pipeline(
         functions: Optional list of function dicts or objects (name, start_line, end_line,
             text, and optional too_large). When supplied, review and repair run at the
             function level, splicing verified fixes into the full file.
+        extra_context: Optional supplementary context (read-only) for review and repair.
+        context_level: Optional metadata string representing scope of extra_context.
 
     Returns:
         A JSON-serialisable dict with keys:
-        ``file``, ``counts``, ``findings``, ``discarded``, ``repairs``, ``summary``.
+        ``file``, ``context_level``, ``counts``, ``findings``, ``discarded``, ``repairs``, ``summary``.
         All errors are captured inside the dict — this function never raises.
     """
 
@@ -93,7 +97,7 @@ def run_pipeline(
             client = get_client()
         except Exception as err:
             logger.error("get_client() failed: %s", err)
-            return _error_result(file, f"Failed to initialise LLM client: {err}")
+            return _error_result(file, f"Failed to initialise LLM client: {err}", context_level=context_level)
 
     # Resolve verifier
     if verifier is None:
@@ -101,7 +105,7 @@ def run_pipeline(
             verifier = LocalVerifier(test_code=test_code)
         except Exception as err:
             logger.error("LocalVerifier init failed: %s", err)
-            return _error_result(file, f"Failed to initialise verifier: {err}")
+            return _error_result(file, f"Failed to initialise verifier: {err}", context_level=context_level)
 
     # ------------------------------------------------------------------
     # Stage 1: Review
@@ -122,6 +126,8 @@ def run_pipeline(
                     changed_lines=changed_lines,
                     client=client,
                     start_line=f_start,
+                    extra_context=extra_context,
+                    context_level=context_level,
                 )
                 findings.extend(func_findings)
         except Exception as err:
@@ -132,7 +138,14 @@ def run_pipeline(
             logger.error(review_error)
     else:
         try:
-            findings = review(context=code, file=file, changed_lines=changed_lines, client=client)
+            findings = review(
+                context=code,
+                file=file,
+                changed_lines=changed_lines,
+                client=client,
+                extra_context=extra_context,
+                context_level=context_level,
+            )
         except Exception as err:
             review_error = (
                 f"Review stage raised an unexpected exception: {err}\n"
@@ -173,6 +186,7 @@ def run_pipeline(
             client=client,
             max_attempts=max_attempts,
             functions=functions,
+            extra_context=extra_context,
         )
         try:
             outcomes = agent.repair_all(
@@ -180,6 +194,7 @@ def run_pipeline(
                 scored_findings=filter_result.kept,
                 file_path=file,
                 functions=functions,
+                extra_context=extra_context,
             )
         except Exception as err:
             repair_error = (
@@ -245,6 +260,7 @@ def run_pipeline(
 
     result: dict[str, Any] = {
         "file": file,
+        "context_level": context_level,
         "counts": {
             "issues_detected": len(findings),
             "kept": filter_result.kept_count,
@@ -274,20 +290,16 @@ def run_pipeline(
 
     return result
 
-    if pipeline_errors:
-        result["pipeline_errors"] = pipeline_errors
-
-    return result
-
 
 # ---------------------------------------------------------------------------
 # Internal fallback for catastrophic early failures
 # ---------------------------------------------------------------------------
 
-def _error_result(file: str, error: str) -> dict[str, Any]:
+def _error_result(file: str, error: str, context_level: str | None = None) -> dict[str, Any]:
     """Return a minimal result dict that captures a fatal initialisation error."""
     return {
         "file": file,
+        "context_level": context_level,
         "counts": {
             "issues_detected": 0,
             "kept": 0,

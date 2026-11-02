@@ -16,11 +16,13 @@ class RepairAgent:
         client: LLMClient | None = None,
         max_attempts: int = 3,
         functions: list[Any] | None = None,
+        extra_context: str | None = None,
     ) -> None:
         self.verifier = verifier
         self.client = client
         self.max_attempts = max_attempts
         self.functions = functions
+        self.extra_context = extra_context
 
     def repair(
         self,
@@ -28,6 +30,7 @@ class RepairAgent:
         finding: Finding,
         file_path: str = "snippet.py",
         function_info: dict[str, Any] | Any | None = None,
+        extra_context: str | None = None,
     ) -> RepairOutcome:
         """Repair a single code finding with verification and retry loops.
 
@@ -36,10 +39,12 @@ class RepairAgent:
             finding: Finding describing the issue.
             file_path: Path of the source code file.
             function_info: Optional function dict or object if repairing at function-level.
+            extra_context: Optional supplementary context (read-only).
 
         Returns:
             RepairOutcome with verification status and attempt history.
         """
+        ctx = extra_context if extra_context is not None else self.extra_context
         return repair_with_retries(
             code=code,
             finding=finding,
@@ -48,6 +53,7 @@ class RepairAgent:
             max_attempts=self.max_attempts,
             file_path=file_path,
             function_info=function_info,
+            extra_context=ctx,
         )
 
     def repair_all(
@@ -56,6 +62,7 @@ class RepairAgent:
         scored_findings: list[Any],
         file_path: str = "snippet.py",
         functions: list[Any] | None = None,
+        extra_context: str | None = None,
     ) -> list[RepairOutcome]:
         """Sequentially repair a collection of findings, updating code baseline after each verified fix.
 
@@ -64,11 +71,13 @@ class RepairAgent:
             scored_findings: List of Finding or ScoredFinding instances.
             file_path: Path of the source code file.
             functions: Optional list of function dicts or objects for function-level repair.
+            extra_context: Optional supplementary context (read-only).
 
         Returns:
             List of RepairOutcome objects corresponding to each finding repaired.
         """
         funcs = functions if functions is not None else self.functions
+        ctx = extra_context if extra_context is not None else self.extra_context
         working_funcs = None
         if funcs:
             working_funcs = [
@@ -100,6 +109,7 @@ class RepairAgent:
                 finding=finding,
                 file_path=file_path,
                 function_info=func_info,
+                extra_context=ctx,
             )
             outcomes.append(outcome)
             if outcome.status == "verified" and outcome.final_code:

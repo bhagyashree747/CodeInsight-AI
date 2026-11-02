@@ -31,6 +31,7 @@ def build_repair_prompt(
     finding: Finding,
     previous_patch: "Patch | None" = None,
     failure_feedback: str | None = None,
+    extra_context: str | None = None,
 ) -> str:
     """Build the user prompt for repairing a single code finding.
 
@@ -39,6 +40,7 @@ def build_repair_prompt(
         finding: The Finding to repair.
         previous_patch: Optional previous Patch attempt that failed.
         failure_feedback: Optional error message or feedback from testing the previous patch.
+        extra_context: Optional supplementary context (read-only).
 
     Returns:
         Formatted prompt string for the LLM.
@@ -49,6 +51,10 @@ def build_repair_prompt(
 
     cat_str = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
     sev_str = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
+
+    context_section = ""
+    if extra_context and extra_context.strip():
+        context_section = f"\nRelated context:\n{extra_context.strip()}\n"
 
     feedback_section = ""
     if previous_patch is not None or failure_feedback is not None:
@@ -66,7 +72,7 @@ def build_repair_prompt(
 
 Original code to fix (line numbers prefixed):
 {code_with_lines}
-
+{context_section}
 Issue to fix:
 - Line: {finding.line}
 - Category: {cat_str}
@@ -85,6 +91,7 @@ def build_function_repair_prompt(
     finding: Finding,
     previous_patch: "Patch | None" = None,
     failure_feedback: str | None = None,
+    extra_context: str | None = None,
 ) -> str:
     """Build the user prompt for repairing a single function finding.
 
@@ -95,12 +102,17 @@ def build_function_repair_prompt(
         finding: The Finding to repair.
         previous_patch: Optional previous Patch attempt that failed.
         failure_feedback: Optional error message or feedback from testing previous attempt.
+        extra_context: Optional supplementary context (read-only).
 
     Returns:
         Formatted prompt string for the LLM.
     """
     cat_str = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
     sev_str = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
+
+    context_section = ""
+    if extra_context and extra_context.strip():
+        context_section = f"\nRelated context:\n{extra_context.strip()}\n"
 
     feedback_section = ""
     if previous_patch is not None or failure_feedback is not None:
@@ -117,7 +129,7 @@ def build_function_repair_prompt(
 
     return f"""Function code to fix:
 {function_text}
-
+{context_section}
 Issue to fix:
 - Line: {finding.line}
 - Category: {cat_str}

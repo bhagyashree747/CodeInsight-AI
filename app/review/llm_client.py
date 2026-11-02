@@ -63,7 +63,7 @@ class MockLLMClient(LLMClient):
     def _generate_realistic_function_repair(self, user_prompt: str) -> str:
         """Inspect the function repair prompt and return realistic corrected function."""
         func_match = re.search(
-            r"Function code to fix:\s*\n(.*?)\n\s*Issue to fix:",
+            r"Function code to fix:\s*\n(.*?)\n\s*(?:Related context:|Issue to fix:)",
             user_prompt,
             re.DOTALL,
         )
@@ -191,7 +191,7 @@ class MockLLMClient(LLMClient):
 '''
             else:
                 code_match = re.search(
-                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*(?:Related context:|Issue to fix:)",
                     user_prompt,
                     re.DOTALL,
                 )
@@ -278,7 +278,7 @@ class MockLLMClient(LLMClient):
 '''
             else:
                 code_match = re.search(
-                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*(?:Related context:|Issue to fix:)",
                     user_prompt,
                     re.DOTALL,
                 )
@@ -331,7 +331,7 @@ class MockLLMClient(LLMClient):
 '''
             else:
                 code_match = re.search(
-                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*Issue to fix:",
+                    r"Original code to fix \(line numbers prefixed\):\s*\n(.*?)\n\s*(?:Related context:|Issue to fix:)",
                     user_prompt,
                     re.DOTALL,
                 )

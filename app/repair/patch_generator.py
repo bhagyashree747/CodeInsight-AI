@@ -199,6 +199,7 @@ def generate_patch(
     previous_patch: Patch | None = None,
     failure_feedback: str | None = None,
     attempt: int = 1,
+    extra_context: str | None = None,
 ) -> Patch:
     """Generate a repair patch for a specific finding using an LLM.
 
@@ -209,6 +210,7 @@ def generate_patch(
         previous_patch: Optional previously attempted patch that failed.
         failure_feedback: Optional feedback or test output from previous failed patch.
         attempt: Attempt counter for this patch generation.
+        extra_context: Optional supplementary context (read-only).
 
     Returns:
         A Patch instance containing the fixed code, explanation, and unified diff.
@@ -224,6 +226,7 @@ def generate_patch(
         finding=finding,
         previous_patch=previous_patch,
         failure_feedback=failure_feedback,
+        extra_context=extra_context,
     )
 
     # Attempt 1: Call LLM and parse JSON
@@ -297,6 +300,7 @@ def generate_function_patch(
     previous_patch: Patch | None = None,
     failure_feedback: str | None = None,
     attempt: int = 1,
+    extra_context: str | None = None,
 ) -> Patch:
     """Generate a repair patch for a function and splice it into the full file.
 
@@ -308,6 +312,7 @@ def generate_function_patch(
         previous_patch: Optional previously attempted patch that failed.
         failure_feedback: Optional feedback from previous failed patch.
         attempt: Attempt counter for this patch generation.
+        extra_context: Optional supplementary context (read-only).
 
     Returns:
         Patch instance containing the full fixed code with function spliced in.
@@ -329,6 +334,7 @@ def generate_function_patch(
         finding=finding,
         previous_patch=previous_patch,
         failure_feedback=failure_feedback,
+        extra_context=extra_context,
     )
 
     # Attempt 1: Call LLM and parse response
