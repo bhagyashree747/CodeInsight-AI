@@ -1,0 +1,83 @@
+# CodeInsight evaluation set (repo: psf/requests)
+# Updated: 2026-11-02
+#
+# STATUS
+#   PROVEN   = fail-to-pass verified with run_failtopass.py (Windows, Python 3.13)
+#   DROPPED  = not used (reason given); the URL line is commented out
+#
+# "Flips" = number of tests that fail on the base commit + PR tests, and pass once the PR's fix is added.
+#
+# Known Windows baseline failure in EVERY PR (fails before AND after, ignore it):
+#   tests/test_requests.py::TestPreparingURLs::test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert
+#   Cause: tests/certs/valid/ca is a symlink that Git on Windows saves as a plain text file.
+#
+# Only lines starting with http are active, so scripts can read this file.
+
+# ---------------------------------------------------------------------------
+# PROVEN (9)
+# ---------------------------------------------------------------------------
+
+# #7332 Preserve semicolons in digest auth URI | PROVEN, 1 flip
+# source: src/requests/auth.py (changed function not checked yet)
+# test: TestRequests::test_DIGESTAUTH_PRESERVES_SEMICOLONS_IN_URI_PATH
+https://github.com/psf/requests/pull/7332
+
+# #7296 UTF-8 bytes credentials in HTTPDigestAuth | PROVEN, 1 flip
+# source: src/requests/auth.py HTTPDigestAuth.build_digest_header (3,828 chars), whole file fits 12k
+# test: TestRequests::test_digest_auth_utf8_bytes_credentials_match_str
+https://github.com/psf/requests/pull/7296
+
+# #7553 Validate timeout type before passing to urllib3 | PROVEN, 3 flips
+# source: src/requests/adapters.py HTTPAdapter.send (4,894 chars)
+# test: TestTimeout::test_invalid_timeout (3 parametrizations: False, True, foo)
+https://github.com/psf/requests/pull/7553
+
+# #7230 MockResponse.getheaders() always returned None | PROVEN, 4 flips
+# source: src/requests/cookies.py MockResponse.getheaders (78 chars)
+# tests: test_mock_response_getheaders_{case_insensitive,returns_empty_list,returns_headers_list,single_value}
+https://github.com/psf/requests/pull/7230
+
+# #7501 Preserve explicit Cookie headers on same-origin redirects | PROVEN, 1 flip
+# source: src/requests/sessions.py SessionRedirectMixin.resolve_redirects (5,131 chars)
+# test: test_cookie_header_is_retained_on_same_host_redirect
+#       (test_cookie_header_is_stripped_on_cross_origin_redirect passes before and after: guard test)
+https://github.com/psf/requests/pull/7501
+
+# #7541 Parse standard cookie Expires dates from Morsel | PROVEN, 2 flips
+# source: src/requests/cookies.py morsel_to_cookie (1,012 chars)
+# tests: TestMorselToCookieExpires::test_expires_valid_http_date, test_cookie_jar_update_accepts_http_date
+https://github.com/psf/requests/pull/7541
+
+# #7346 Preserve empty cookie values in RequestsCookieJar | PROVEN, 1 flip
+# source: src/requests/cookies.py RequestsCookieJar._find_no_duplicates (1,377 chars)
+# test: test_cookie_get_and_getitem_preserve_empty_value
+# NOTE: same function as #7303. Keep only one in the main evaluation unless results differ.
+https://github.com/psf/requests/pull/7346
+
+# #7303 RequestsCookieJar.get() returns falsy cookie values | PROVEN, 1 flip
+# source: src/requests/cookies.py RequestsCookieJar._find_no_duplicates (1,377 chars)
+# test: test_cookie_falsy_values
+# NOTE: same function as #7346.
+https://github.com/psf/requests/pull/7303
+
+# #7398 Handle None-valued method cookies as removals | PROVEN, 2 flips
+# source: cookies.py cookiejar_from_dict (878 chars) + sessions.py Session.prepare_request (1,818 chars)
+# tests: test_cookiejar_from_dict_omits_none_values, test_none_request_cookie_removes_session_cookie
+https://github.com/psf/requests/pull/7398
+
+# ---------------------------------------------------------------------------
+# DROPPED
+# ---------------------------------------------------------------------------
+
+# #7068 no_proxy handling: 6 files now (the screener saw 5, so the PR changed), 11+ changed functions, over the 5-file limit
+# https://github.com/psf/requests/pull/7068
+
+# #7065 IPv6 zone ID support: a feature, not a bug fix
+# https://github.com/psf/requests/pull/7065
+
+# ---------------------------------------------------------------------------
+# NOTES
+# ---------------------------------------------------------------------------
+# - cookies.py is touched by 5 of the 9 PRs (7541, 7398, 7346, 7303, 7230). Still to add: 2-3 PRs from other modules
+#   (utils.py, models.py, structures.py, auth/redirects) so the evaluation is not mostly cookies.
+# - TODO: check the changed function of #7332 with run_functions_test.py.
