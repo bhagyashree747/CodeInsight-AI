@@ -286,3 +286,22 @@ def test_changed_lines_none_keeps_all_valid_findings():
         client=MockLLMClient(),
     )
     assert result_no_filter["counts"]["kept"] >= result_with_filter["counts"]["kept"]
+
+
+def test_pipeline_repairs_contract_keys():
+    """Verify each repair entry contains all required schema keys."""
+    code = "def add(a, b):\n    return a - b\n"
+    res = run_pipeline(code=code, file="calc.py")
+    assert "repairs" in res
+    required_keys = {
+        "patched_function",
+        "patched_code",
+        "diff",
+        "explanation",
+        "status",
+        "attempts",
+        "verification_stage",
+    }
+    for rep in res["repairs"]:
+        missing = required_keys - rep.keys()
+        assert not missing, f"Missing keys in repair output: {missing}"

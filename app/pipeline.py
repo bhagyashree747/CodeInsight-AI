@@ -210,11 +210,15 @@ def run_pipeline(
             explanation = ""
             verification_stage = "none"
 
+            patched_code = None
+            patched_function = None
             if outcome.status == "skipped":
                 explanation = "repair skipped: function too large"
             elif outcome.final_patch is not None:
                 diff_text = outcome.final_patch.diff or ""
                 explanation = outcome.final_patch.explanation or ""
+                patched_code = outcome.final_patch.fixed_code
+                patched_function = outcome.final_patch.fixed_function
 
             # Last attempt's verification stage
             if outcome.attempts:
@@ -224,10 +228,12 @@ def run_pipeline(
 
             repair_outcomes_raw.append({
                 "finding": _finding_to_dict(sf.finding),
-                "status": outcome.status,
-                "attempts": outcome.total_attempts,
+                "patched_function": patched_function,
+                "patched_code": patched_code,
                 "diff": diff_text,
                 "explanation": explanation,
+                "status": outcome.status,
+                "attempts": outcome.total_attempts,
                 "verification_stage": verification_stage,
             })
     else:
