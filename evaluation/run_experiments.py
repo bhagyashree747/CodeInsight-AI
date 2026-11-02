@@ -17,6 +17,8 @@ Honesty: mock results carry a clear WARNING banner and named provider in chart t
 
 from __future__ import annotations
 
+from app.pipeline import run_pipeline
+
 import argparse
 import csv
 import os
@@ -598,6 +600,91 @@ def _print_summary_table(
 # Main
 # ---------------------------------------------------------------------------
 
+
+
+def run_context_experiment(
+    snippets: list[Any],
+    client: Any,
+    sleep_s: float = 2.0,
+) -> list[dict[str, Any]]:
+    """Run repair evaluation across diff, function, and file context levels."""
+    levels = ["diff", "function", "file"]
+    rows: list[dict[str, Any]] = []
+
+    for snip in snippets:
+        if getattr(snip, "is_clean", False):
+            continue
+        bug_line = getattr(snip, "known_bug_line", None)
+        changed_lines_set = {bug_line} if bug_line is not None else None
+        snip_id = getattr(snip, "id", "snippet")
+
+        for level in levels:
+            extra_ctx = snip.code
+            if level == "diff":
+                extra_ctx = f"Changed lines: {changed_lines_set}"
+            elif level == "function":
+                extra_ctx = f"Function: {snip_id}"
+
+            res = run_pipeline(
+                code=snip.code,
+                file=f"{snip_id}.py",
+                changed_lines=changed_lines_set,
+                client=client,
+                max_attempts=3,
+                test_code=getattr(snip, "test_code", None),
+                context_level=level,
+                extra_context=extra_ctx,
+            )
+            repairs = res.get("repairs", [])
+            verified = sum(1 for r in repairs if r.get("status") == "verified")
+            one_shot_pass = any(r.get("status") == "verified" and r.get("attempts") == 1 for r in repairs)
+
+            rows.append({
+                "snippet": getattr(snip, "id", "snippet"),
+                "context_level": level,
+                "findings_count": len(res.get("findings", [])),
+                "repairs_attempted": len(repairs),
+                "one_shot_verified": 1 if one_shot_pass else 0,
+                "multi_attempt_verified": 1 if verified > 0 else 0,
+                "total_attempts": sum(r.get("attempts", 0) for r in repairs),
+            })
+            if sleep_s > 0:
+                time.sleep(sleep_s)
+
+    return rows
+
+
+def _save_context_chart(rows: list[dict[str, Any]], out_dir: Path, provider: str) -> None:
+    """Generate context level comparison chart."""
+    if not rows:
+        return
+    import matplotlib.pyplot as plt
+    levels = ["diff", "function", "file"]
+    one_shot_scores = []
+    multi_scores = []
+
+    for lvl in levels:
+        lvl_rows = [r for r in rows if r["context_level"] == lvl]
+        total = len(lvl_rows) or 1
+        one_shot_scores.append(sum(r["one_shot_verified"] for r in lvl_rows) / total * 100)
+        multi_scores.append(sum(r["multi_attempt_verified"] for r in lvl_rows) / total * 100)
+
+    x = range(len(levels))
+    width = 0.35
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.bar([i - width/2 for i in x], one_shot_scores, width, label='One-Shot')
+    ax.bar([i + width/2 for i in x], multi_scores, width, label='Up to 3 Attempts')
+    ax.set_ylabel('Success Rate (%)')
+    ax.set_title(f'Context Level Repair Performance ({provider})')
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([l.capitalize() for l in levels])
+    ax.set_ylim(0, 105)
+    ax.legend()
+    plt.tight_layout()
+    plt.savefig(out_dir / 'context_comparison.png', dpi=200)
+    plt.close()
+
+
 def main(argv: list[str] | None = None) -> None:
     _review_cache.clear()
     _review_errors.clear()
@@ -673,9 +760,15 @@ def main(argv: list[str] | None = None) -> None:
     _write_csv(out_dir / "experiment_repair.csv", repair_rows_combined)
     print(f"  Saved: {out_dir / 'experiment_repair.csv'}")
 
+    # Context experiment
+    context_rows = run_context_experiment(all_snippets, wrapped_client, sleep_s=args.sleep)
+    _write_csv(out_dir / "experiment_context.csv", context_rows)
+    print(f"  Saved: {out_dir / 'experiment_context.csv'}")
+
     # Charts
     _save_filter_chart(filter_buggy, filter_clean, out_dir, provider)
     _save_repair_chart(one_shot, self_corr, out_dir, provider)
+    _save_context_chart(context_rows, out_dir, provider)
 
     # README
     _write_readme(out_dir)
