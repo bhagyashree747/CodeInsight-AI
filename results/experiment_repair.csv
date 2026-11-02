@@ -1,13 +1,3 @@
 provider,id,category,max_attempts,status,verified,attempts,error
-openai_compat,sql_injection,security,1,verified,True,1,
-openai_compat,division_by_zero,bug,1,failed,False,1,Pytest verification suite failed
-openai_compat,mutable_default,bug,1,verified,True,1,
-openai_compat,off_by_one,logic,1,verified,True,1,
-openai_compat,none_handling,bug,1,failed,False,1,Pytest verification suite failed
-openai_compat,identity_vs_equality,logic,1,verified,True,1,
-openai_compat,sql_injection,security,3,verified,True,1,
-openai_compat,division_by_zero,bug,3,verified,True,2,
-openai_compat,mutable_default,bug,3,verified,True,1,
-openai_compat,off_by_one,logic,3,verified,True,1,
-openai_compat,none_handling,bug,3,verified,True,2,
-openai_compat,identity_vs_equality,logic,3,verified,True,1,
+mock,sql_injection,security,1,failed,False,1,SyntaxError at line 4: expected an indented block after function definition on line 3
+mock,sql_injection,security,3,failed,False,3,SyntaxError at line 4: expected an indented block after function definition on line 3
