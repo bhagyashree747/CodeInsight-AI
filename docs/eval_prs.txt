@@ -1,83 +1,115 @@
 # CodeInsight evaluation set (repo: psf/requests)
 # Updated: 2026-11-02
 #
-# STATUS
-#   PROVEN   = fail-to-pass verified with run_failtopass.py (Windows, Python 3.13)
-#   DROPPED  = not used (reason given); the URL line is commented out
+# All 13 PRs below are PROVEN fail-to-pass with run_failtopass.py (Windows, Python 3.13):
+# base commit + the PR's tests -> some tests fail; add the PR's fix -> those tests pass.
+# "Flips" = number of tests that go from fail to pass.
 #
-# "Flips" = number of tests that fail on the base commit + PR tests, and pass once the PR's fix is added.
-#
-# Known Windows baseline failure in EVERY PR (fails before AND after, ignore it):
+# Known Windows baseline failure for PRs that run tests/test_requests.py (fails before AND after, ignore it):
 #   tests/test_requests.py::TestPreparingURLs::test_different_connection_pool_for_tls_settings_verify_bundle_unexpired_cert
 #   Cause: tests/certs/valid/ca is a symlink that Git on Windows saves as a plain text file.
 #
+# All changed source functions are 78 to 5,131 chars, so function-level repair fits Member 1's 12,000-char limit.
 # Only lines starting with http are active, so scripts can read this file.
 
 # ---------------------------------------------------------------------------
-# PROVEN (9)
+# AUTH (digest auth): 2 PRs, same function
 # ---------------------------------------------------------------------------
 
-# #7332 Preserve semicolons in digest auth URI | PROVEN, 1 flip
-# source: src/requests/auth.py (changed function not checked yet)
+# #7332 Preserve semicolons in digest auth URI | 1 flip
+# source: src/requests/auth.py HTTPDigestAuth.build_digest_header (3,547 chars; whole file fits 12k)
 # test: TestRequests::test_DIGESTAUTH_PRESERVES_SEMICOLONS_IN_URI_PATH
 https://github.com/psf/requests/pull/7332
 
-# #7296 UTF-8 bytes credentials in HTTPDigestAuth | PROVEN, 1 flip
-# source: src/requests/auth.py HTTPDigestAuth.build_digest_header (3,828 chars), whole file fits 12k
+# #7296 UTF-8 bytes credentials in HTTPDigestAuth | 1 flip
+# source: src/requests/auth.py HTTPDigestAuth.build_digest_header (3,828 chars; whole file fits 12k)
 # test: TestRequests::test_digest_auth_utf8_bytes_credentials_match_str
 https://github.com/psf/requests/pull/7296
 
-# #7553 Validate timeout type before passing to urllib3 | PROVEN, 3 flips
+# ---------------------------------------------------------------------------
+# ADAPTERS / SESSIONS
+# ---------------------------------------------------------------------------
+
+# #7553 Validate timeout type before passing to urllib3 | 3 flips
 # source: src/requests/adapters.py HTTPAdapter.send (4,894 chars)
 # test: TestTimeout::test_invalid_timeout (3 parametrizations: False, True, foo)
 https://github.com/psf/requests/pull/7553
 
-# #7230 MockResponse.getheaders() always returned None | PROVEN, 4 flips
-# source: src/requests/cookies.py MockResponse.getheaders (78 chars)
-# tests: test_mock_response_getheaders_{case_insensitive,returns_empty_list,returns_headers_list,single_value}
-https://github.com/psf/requests/pull/7230
-
-# #7501 Preserve explicit Cookie headers on same-origin redirects | PROVEN, 1 flip
+# #7501 Preserve explicit Cookie headers on same-origin redirects | 1 flip
 # source: src/requests/sessions.py SessionRedirectMixin.resolve_redirects (5,131 chars)
 # test: test_cookie_header_is_retained_on_same_host_redirect
 #       (test_cookie_header_is_stripped_on_cross_origin_redirect passes before and after: guard test)
 https://github.com/psf/requests/pull/7501
 
-# #7541 Parse standard cookie Expires dates from Morsel | PROVEN, 2 flips
+# ---------------------------------------------------------------------------
+# COOKIES: 5 PRs (7346 and 7303 change the same function)
+# ---------------------------------------------------------------------------
+
+# #7230 MockResponse.getheaders() always returned None | 4 flips
+# source: src/requests/cookies.py MockResponse.getheaders (78 chars)
+# tests: test_mock_response_getheaders_{case_insensitive,returns_empty_list,returns_headers_list,single_value}
+https://github.com/psf/requests/pull/7230
+
+# #7541 Parse standard cookie Expires dates from Morsel | 2 flips
 # source: src/requests/cookies.py morsel_to_cookie (1,012 chars)
 # tests: TestMorselToCookieExpires::test_expires_valid_http_date, test_cookie_jar_update_accepts_http_date
 https://github.com/psf/requests/pull/7541
 
-# #7346 Preserve empty cookie values in RequestsCookieJar | PROVEN, 1 flip
+# #7346 Preserve empty cookie values in RequestsCookieJar | 1 flip
 # source: src/requests/cookies.py RequestsCookieJar._find_no_duplicates (1,377 chars)
 # test: test_cookie_get_and_getitem_preserve_empty_value
-# NOTE: same function as #7303. Keep only one in the main evaluation unless results differ.
 https://github.com/psf/requests/pull/7346
 
-# #7303 RequestsCookieJar.get() returns falsy cookie values | PROVEN, 1 flip
-# source: src/requests/cookies.py RequestsCookieJar._find_no_duplicates (1,377 chars)
+# #7303 RequestsCookieJar.get() returns falsy cookie values | 1 flip
+# source: src/requests/cookies.py RequestsCookieJar._find_no_duplicates (1,377 chars; same function as 7346)
 # test: test_cookie_falsy_values
-# NOTE: same function as #7346.
 https://github.com/psf/requests/pull/7303
 
-# #7398 Handle None-valued method cookies as removals | PROVEN, 2 flips
+# #7398 Handle None-valued method cookies as removals | 2 flips
 # source: cookies.py cookiejar_from_dict (878 chars) + sessions.py Session.prepare_request (1,818 chars)
 # tests: test_cookiejar_from_dict_omits_none_values, test_none_request_cookie_removes_session_cookie
 https://github.com/psf/requests/pull/7398
 
 # ---------------------------------------------------------------------------
-# DROPPED
+# UTILS: 2 PRs
 # ---------------------------------------------------------------------------
 
-# #7068 no_proxy handling: 6 files now (the screener saw 5, so the PR changed), 11+ changed functions, over the 5-file limit
-# https://github.com/psf/requests/pull/7068
+# #7309 Fix malformed value parsing for Content-Type | 2 flips
+# source: src/requests/utils.py _parse_content_type_header (649 chars)
+# tests: tests/test_utils.py test__parse_content_type_header[multipart...], test_get_encoding_from_headers[value3-ISO-8859-1]
+https://github.com/psf/requests/pull/7309
 
+# #7205 Fix empty netrc entry usage | 1 flip
+# source: src/requests/utils.py get_netrc_auth (1,299 chars)
+# test: tests/test_utils.py::TestGetNetrcAuth::test_empty_default_credentials_ignored
+https://github.com/psf/requests/pull/7205
+
+# ---------------------------------------------------------------------------
+# MODELS: 2 PRs (similar idea: __getattr__-based file wrappers, different functions)
+# ---------------------------------------------------------------------------
+
+# #7502 Fix _encode_files detection for __getattr__-based file wrappers | 1 flip
+# source: src/requests/models.py RequestEncodingMixin._encode_files (2,751 chars)
+# test: TestRequests::test_post_named_tempfile
+https://github.com/psf/requests/pull/7502
+
+# #7433 Fix prepare_body stream detection for __getattr__-based file wrappers | 1 flip
+# source: src/requests/models.py PreparedRequest.prepare_body (3,144 chars)
+# test: TestRequests::test_getattr_proxy_stream_follows_redirect
+https://github.com/psf/requests/pull/7433
+
+# ---------------------------------------------------------------------------
+# NOT USED
+# ---------------------------------------------------------------------------
+
+# #7068 no_proxy handling: 6 files, 11+ changed functions, over the 5-file limit
 # #7065 IPv6 zone ID support: a feature, not a bug fix
-# https://github.com/psf/requests/pull/7065
+# #7426, #7431: no test changed, so fail-to-pass cannot be verified
+# #7190: 19 files (CI and build fixes)
 
 # ---------------------------------------------------------------------------
 # NOTES
 # ---------------------------------------------------------------------------
-# - cookies.py is touched by 5 of the 9 PRs (7541, 7398, 7346, 7303, 7230). Still to add: 2-3 PRs from other modules
-#   (utils.py, models.py, structures.py, auth/redirects) so the evaluation is not mostly cookies.
-# - TODO: check the changed function of #7332 with run_functions_test.py.
+# - Mix: auth 2, adapters/sessions 2, cookies 5, utils 2, models 2.
+# - Pairs that overlap: 7332/7296 (same function), 7346/7303 (same function). Mention in the report.
+# - 11 of 13 source files are over 12,000 chars; only 7332 and 7296 fit whole. The rest need function-level repair.
