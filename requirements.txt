@@ -1,0 +1,5 @@
+pydantic
+httpx
+pytest
+python-dotenv
+matplotlib>=3.8,<4

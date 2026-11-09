@@ -1,0 +1,4 @@
+snippet,context_level,findings_count,repairs_attempted,one_shot_verified,multi_attempt_verified,total_attempts
+sql_injection,diff,1,1,0,0,3
+sql_injection,function,1,1,0,0,3
+sql_injection,file,1,1,0,0,3
