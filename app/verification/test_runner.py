@@ -19,6 +19,9 @@ _READ_CHUNK_BYTES = 4096
 def run_tests(
     target: str | Path,
     timeout: float = 60,
+    tests: list[str] | None = None,
+    python: str | Path | None = None,
+    workspace: str | Path | None = None,
 ) -> dict:
     """
     Run pytest for a trusted project target and capture the results.
@@ -27,6 +30,9 @@ def run_tests(
     Args:
         target: A Python test file or directory containing tests.
         timeout: Maximum execution time in seconds.
+        tests: Optional pytest node IDs to run instead of the full target.
+        python: Optional Python executable for the test environment.
+        workspace: Optional pytest working directory. Defaults to the target directory.
 
     Returns:
         A dictionary containing the test status, exit code,
@@ -90,12 +96,60 @@ def run_tests(
             "duration_seconds": None,
         }
 
+    if tests is not None:
+        if (
+            not isinstance(tests, (list, tuple))
+            or not tests
+            or any(not isinstance(item, str) or not item.strip() for item in tests)
+        ):
+            return {
+                "passed": False,
+                "status": "error",
+                "exit_code": None,
+                "stdout": "",
+                "stderr": "",
+                "error": "tests must be a non-empty list of pytest node ID strings.",
+                "duration_seconds": None,
+            }
+
+    if python is not None and (
+        not isinstance(python, (str, Path)) or not str(python).strip()
+    ):
+        return {
+            "passed": False,
+            "status": "error",
+            "exit_code": None,
+            "stdout": "",
+            "stderr": "",
+            "error": "python must be a non-empty executable path.",
+            "duration_seconds": None,
+        }
+
+    try:
+        working_directory = (
+            Path(workspace).expanduser().resolve(strict=True)
+            if workspace is not None
+            else (path if path.is_dir() else path.parent)
+        )
+        if not working_directory.is_dir():
+            raise ValueError(f"Workspace must be a directory: {working_directory}")
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        return {
+            "passed": False,
+            "status": "error",
+            "exit_code": None,
+            "stdout": "",
+            "stderr": "",
+            "error": f"Invalid pytest workspace: {exc}",
+            "duration_seconds": None,
+        }
+
     command = [
-        sys.executable,
+        str(python) if python is not None else sys.executable,
         "-m",
         "pytest",
         "-q",
-        str(path),
+        *(list(tests) if tests is not None else [str(path)]),
     ]
 
     try:
@@ -107,7 +161,7 @@ def run_tests(
         )
         process = subprocess.Popen(
             command,
-            cwd=str(path if os.path.isdir(path) else path.parent),
+            cwd=str(working_directory),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             shell=False,

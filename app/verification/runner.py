@@ -110,6 +110,8 @@ def run_patch_verification(
     original_file: str | Path,
     workspace: str | Path,
     test_timeout: float = 60,
+    tests: list[str] | None = None,
+    python: str | Path | None = None,
 ) -> dict:
     """
     Compare the project's baseline and patched test suites in temporary copies.
@@ -120,6 +122,11 @@ def run_patch_verification(
     """
     start_time = time.monotonic()
     display_target = str(original_file)
+    test_options = {}
+    if tests is not None:
+        test_options["tests"] = tests
+    if python is not None:
+        test_options["python"] = python
 
     def failed_report(message: str) -> dict:
         setup_result = {
@@ -205,7 +212,11 @@ def run_patch_verification(
                 ignore=ignore_generated,
             )
 
-            baseline_tests = run_tests(baseline_workspace, timeout=test_timeout)
+            baseline_tests = run_tests(
+                baseline_workspace,
+                timeout=test_timeout,
+                **test_options,
+            )
 
             patched_file = patched_workspace / relative_source
             patched_file.parent.mkdir(parents=True, exist_ok=True)
@@ -225,6 +236,7 @@ def run_patch_verification(
                 patched_tests = run_tests(
                     patched_workspace,
                     timeout=test_timeout,
+                    **test_options,
                 )
             else:
                 patched_tests = {

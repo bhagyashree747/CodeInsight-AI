@@ -55,15 +55,24 @@ class RepairVerificationAdapter:
         original_file: str | Path,
         workspace: str | Path,
         test_timeout: float = 60,
+        tests: list[str] | None = None,
+        python: str | Path | None = None,
     ) -> dict:
         """Verify a generated patch against the project's full test suite."""
         from app.verification.runner import run_patch_verification
+
+        options = {}
+        if tests is not None:
+            options["tests"] = tests
+        if python is not None:
+            options["python"] = python
 
         return run_patch_verification(
             patched_code=patch.fixed_code,
             original_file=original_file,
             workspace=workspace,
             test_timeout=test_timeout,
+            **options,
         )
 
     def verify_patch_result(
