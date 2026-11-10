@@ -1,0 +1,12 @@
+﻿:root {
+  color-scheme: dark;
+}
+
+html {
+  min-width: 320px;
+  background: #0b0e15;
+}
+
+body {
+  margin: 0;
+}
