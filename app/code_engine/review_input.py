@@ -18,15 +18,15 @@ def detect_language(filename):
     return LANGUAGES.get(os.path.splitext(filename)[1].lower(), "text")
 
 
-def _pick_window(lines, changed, max_chars):
-    """Choose a range of lines (1-based, inclusive) around the changes that fits max_chars."""
-    start, end = min(changed), max(changed)
+def _pick_window(lines, anchor, max_chars):
+    """Choose a range of lines (1-based, inclusive) around the anchor lines that fits max_chars."""
+    start, end = min(anchor), max(anchor)
     start = max(1, min(start, len(lines)))
     end = max(start, min(end, len(lines)))
     size = sum(len(line) + 1 for line in lines[start - 1:end])
 
     if size > max_chars:
-        # the changes alone are too big: keep as much as fits, from the first change
+        # the anchor alone is too big: keep as much as fits, from its first line
         end, size = start, len(lines[start - 1]) + 1
         while end < len(lines) and size + len(lines[end]) + 1 <= max_chars:
             end += 1
@@ -141,7 +141,9 @@ def build_review_inputs(pr, client, max_chars=DEFAULT_MAX_CHARS, max_files=DEFAU
                                   start_line=1, end_line=len(lines),
                                   functions=functions, skipped_functions=too_large))
         else:
-            start, end = _pick_window(lines, changed, max_chars)
+            # centre the window on the changed functions if there are any
+            anchor = [n for f in functions for n in (f["start_line"], f["end_line"])] or changed
+            start, end = _pick_window(lines, anchor, max_chars)
             kept = [n for n in changed if start <= n <= end]
             results.append(_entry(name, status, text="\n".join(lines[start - 1:end]),
                                   changed=kept, truncated=True,

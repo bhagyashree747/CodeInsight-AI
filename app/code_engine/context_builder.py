@@ -7,8 +7,8 @@ LEVELS = ("diff", "function", "file")
 
 MODULE_WINDOW = 5        # lines of padding around changes that are outside any function
 NON_PY_WINDOW = 15       # padding for non-Python files at "function" level
-MAX_FILE_CHARS = 40000   # files bigger than this get trimmed at "file" level
-TRIM_RADIUS = 200        # padding used when trimming a big file
+MAX_FILE_CHARS = 40000   # "file" level: bigger files are trimmed to about this size
+TRIM_RADIUS = 200        # starting padding when trimming a big file (shrinks if it does not fit)
 DEFAULT_MAX_FILES = 30   # PRs with more changed files than this get cut off
 
 
@@ -18,11 +18,28 @@ def _number(lines, start, end):
     return "\n".join(f"{n}: {lines[n - 1]}" for n in range(start, end + 1))
 
 
-def _window(total, changed, radius):
-    """A range of lines around the changed lines, kept inside the file."""
-    start = max(1, min(changed) - radius)
-    end = min(total, max(changed) + radius)
-    return start, end
+def _cost(lines, n):
+    """Characters that line n adds to the text ("12: code" plus a newline)."""
+    return len(lines[n - 1]) + len(str(n)) + 3
+
+
+def _clusters(changed, gap):
+    """Group line numbers into runs. A new run starts when the gap to the previous line is > gap."""
+    runs = []
+    for n in sorted(set(changed)):
+        if runs and n - runs[-1][1] <= gap:
+            runs[-1][1] = n
+        else:
+            runs.append([n, n])
+    return runs
+
+
+def _ranges(numbers):
+    """[540, 541, 542, 600] -> '540-542, 600' (keeps headers short when many lines changed)."""
+    parts = []
+    for start, end in _clusters(numbers, 1):
+        parts.append(str(start) if start == end else f"{start}-{end}")
+    return ", ".join(parts)
 
 
 def _make_unit(kind, function, cls, start, end, changed_lines, lines):
@@ -32,7 +49,7 @@ def _make_unit(kind, function, cls, start, end, changed_lines, lines):
         label += f" {function}"
     if cls:
         label += f" (class {cls})"
-    header = f"# {label}, lines {start}-{end}, changed: {changed_lines}"
+    header = f"# {label}, lines {start}-{end}, changed: [{_ranges(changed_lines)}]"
     return {
         "kind": kind,
         "function": function,
@@ -57,38 +74,75 @@ def _diff_unit(changed_file):
     }
 
 
+def _window_units(lines, changed, radius):
+    """One small 'window' unit per cluster of nearby changed lines (never one giant span)."""
+    units = []
+    for s, e in _clusters(changed, 2 * radius):
+        start, end = max(1, s - radius), min(len(lines), e + radius)
+        units.append(_make_unit("window", None, None, start, end,
+                                [n for n in changed if s <= n <= e], lines))
+    return units
+
+
 def _function_units(source, changed, is_python):
     lines = source.splitlines()
 
     if not is_python:
-        start, end = _window(len(lines), changed, NON_PY_WINDOW)
-        return [_make_unit("window", None, None, start, end, changed, lines)]
+        return _window_units(lines, changed, NON_PY_WINDOW)
 
     units = []
     for group in get_change_contexts(source, changed):
         func, cls = group["function"], group["class"]
         if func:
-            start, end, kind = func["start_line"], func["end_line"], "function"
+            units.append(_make_unit(
+                "function", func["name"], cls["name"] if cls else None,
+                func["start_line"], func["end_line"], group["changed_lines"], lines,
+            ))
         else:
-            start, end = _window(len(lines), group["changed_lines"], MODULE_WINDOW)
-            kind = "window"
-        units.append(_make_unit(
-            kind,
-            func["name"] if func else None,
-            cls["name"] if cls else None,
-            start, end, group["changed_lines"], lines,
-        ))
+            units.extend(_window_units(lines, group["changed_lines"], MODULE_WINDOW))
     return units
 
 
-def _file_unit(source, changed):
+def _merge_windows(runs, radius, total):
+    """Pad each run of changed lines by `radius` and merge windows that touch or overlap."""
+    windows = []
+    for s, e in runs:
+        s, e = max(1, s - radius), min(total, e + radius)
+        if windows and s <= windows[-1][1] + 1:
+            windows[-1][1] = max(windows[-1][1], e)
+        else:
+            windows.append([s, e])
+    return windows
+
+
+def _file_units(source, changed):
+    """Whole file if small. Otherwise windows around the changes, kept within MAX_FILE_CHARS."""
     lines = source.splitlines()
     if len(source) <= MAX_FILE_CHARS:
-        start, end, kind = 1, len(lines), "file"
-    else:
-        start, end = _window(len(lines), changed, TRIM_RADIUS)
-        kind = "file_trimmed"
-    return _make_unit(kind, None, None, start, end, changed, lines)
+        return [_make_unit("file", None, None, 1, len(lines), changed, lines)]
+
+    runs = _clusters(changed, 2)
+    radius = TRIM_RADIUS
+    while True:
+        windows = _merge_windows(runs, radius, len(lines))
+        size = sum(_cost(lines, n) for s, e in windows for n in range(s, e + 1))
+        if size <= MAX_FILE_CHARS or radius == 0:
+            break
+        radius //= 2
+
+    # if it still does not fit, cut the windows to the budget (in order)
+    units, used = [], 0
+    for s, e in windows:
+        end, room = s - 1, MAX_FILE_CHARS - used
+        while end < e and _cost(lines, end + 1) <= room:
+            room -= _cost(lines, end + 1)
+            end += 1
+        if end < s:
+            break
+        units.append(_make_unit("file_trimmed", None, None, s, end,
+                                [n for n in changed if s <= n <= end], lines))
+        used = MAX_FILE_CHARS - room
+    return units
 
 
 def build_file_context(changed_file, file_diff, source, level):
@@ -108,7 +162,7 @@ def build_file_context(changed_file, file_diff, source, level):
     elif used == "function":
         units = _function_units(source, changed, is_python)
     else:
-        units = [_file_unit(source, changed)]
+        units = _file_units(source, changed)
 
     text = f"### File: {filename} ({changed_file['status']})\n"
     text += "\n\n".join(u["text"] for u in units)

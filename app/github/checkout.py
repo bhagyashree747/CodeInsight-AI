@@ -14,13 +14,22 @@ def _git(args, cwd):
 def checkout_pr_base(pr, workspace=WORKSPACE):
     """Clone the repo at the PR's BASE commit (the code BEFORE the change).
     Input : the dict from fetch_pull_request()
-    Output: the folder path. If the folder already exists, it is reused.
+    Output: the folder path.
+    If the folder already exists it is reset to the base commit first, because earlier
+    scripts (like run_failtopass.py) can leave the PR's fix inside it.
     If a clone fails halfway, delete that folder and run again."""
     owner, repo = pr["repository"].split("/")
     folder = os.path.abspath(
         os.path.join(workspace, f"{owner}__{repo}__pr{pr['pr_number']}")
     )
+
     if os.path.isdir(os.path.join(folder, ".git")):
+        try:
+            _git(["reset", "--hard", pr["base_sha"]], folder)
+        except RuntimeError:
+            _git(["fetch", "--depth", "1", "origin", pr["base_sha"]], folder)
+            _git(["reset", "--hard", pr["base_sha"]], folder)
+        _git(["clean", "-fdq"], folder)
         return folder
 
     os.makedirs(folder, exist_ok=True)
