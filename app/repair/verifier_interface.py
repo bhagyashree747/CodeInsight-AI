@@ -1,6 +1,6 @@
 """Verification interfaces and result models for CodeInsight AI."""
 
-from typing import Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 from pydantic import BaseModel, Field
 
 VerificationStage = Literal["syntax", "lint", "tests", "none"]
@@ -16,6 +16,10 @@ class VerificationResult(BaseModel):
     )
     error: str = Field(default="", description="Error summary or message if verification failed")
     output: str = Field(default="", description="Detailed compiler, linter, or test output")
+    project_report: dict[str, Any] | None = Field(
+        default=None,
+        description="Full project-level verification report when applicable",
+    )
 
 
 @runtime_checkable

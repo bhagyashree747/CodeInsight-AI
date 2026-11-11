@@ -5,3 +5,9 @@ __pycache__/
 *.pyc
 .pytest_cache/
 workspace/
+node_modules/
+# Python generated files
+*.py[cod]
+# Virtual environments
+.venv/
+# Environment variables and secrets

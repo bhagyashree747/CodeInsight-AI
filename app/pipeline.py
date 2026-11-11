@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import logging
 import traceback
+from pathlib import Path
 from typing import Any
 
 from app.relevance.filter import FilterResult, filter_findings
 from app.repair.agent import RepairAgent
 from app.repair.local_verifier import LocalVerifier
-from app.repair.verifier_interface import Verifier
+from app.repair.schema import Patch
+from app.repair.verifier_interface import VerificationResult, Verifier
 from app.review.llm_client import LLMClient, get_client
 from app.review.reviewer import review
 from app.review.schema import Finding
+from app.verification.repair_adapter import RepairVerificationAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,9 @@ def run_pipeline(
     functions: list[dict[str, Any]] | list[Any] | None = None,
     extra_context: str | None = None,
     context_level: str | None = None,
+    project_workspace: str | Path | None = None,
+    project_test_timeout: float = 60,
+    project_file: str | Path | None = None,
 ) -> dict[str, Any]:
     """Run the full review → filter → repair pipeline on a code snippet.
 
@@ -79,6 +85,13 @@ def run_pipeline(
         max_attempts: Maximum repair attempts per finding.
         test_code: Optional test code string to pass to ``LocalVerifier``.
             Ignored when a custom *verifier* is provided.
+        project_workspace: If supplied, verify each generated patch against this
+            project's full baseline and patched test suites instead of using
+            ``LocalVerifier``.
+        project_test_timeout: Timeout for each project test-suite run.
+        project_file: Source file path within ``project_workspace``. May be
+            absolute or relative to the workspace. Defaults to ``file`` in
+            project mode; ``file`` remains the logical review/verifier name.
         functions: Optional list of function dicts or objects (name, start_line, end_line,
             text, and optional too_large). When supplied, review and repair run at the
             function level, splicing verified fixes into the full file.
@@ -91,6 +104,46 @@ def run_pipeline(
         All errors are captured inside the dict — this function never raises.
     """
 
+    resolved_project_workspace: Path | None = None
+    resolved_project_file: Path | None = None
+    if project_workspace is not None:
+        if verifier is not None:
+            return _error_result(
+                file,
+                "Specify either verifier or project_workspace, not both.",
+                context_level=context_level,
+            )
+        try:
+            resolved_project_workspace = Path(project_workspace).expanduser().resolve(
+                strict=True
+            )
+            if not resolved_project_workspace.is_dir():
+                raise ValueError(
+                    f"Project workspace is not a directory: "
+                    f"{resolved_project_workspace}"
+                )
+            project_source = Path(
+                project_file if project_file is not None else file
+            ).expanduser()
+            if not project_source.is_absolute():
+                project_source = resolved_project_workspace / project_source
+            resolved_project_file = project_source.resolve(strict=True)
+            resolved_project_file.relative_to(resolved_project_workspace)
+            if (
+                not resolved_project_file.is_file()
+                or resolved_project_file.suffix.lower() != ".py"
+            ):
+                raise ValueError(
+                    "Project file must be an existing Python file within "
+                    f"the project workspace: {resolved_project_file}"
+                )
+        except (OSError, RuntimeError, TypeError, ValueError) as err:
+            return _error_result(
+                file,
+                f"Invalid project verification paths: {err}",
+                context_level=context_level,
+            )
+
     # Resolve client once so both review and repair use the same instance.
     if client is None:
         try:
@@ -99,8 +152,22 @@ def run_pipeline(
             logger.error("get_client() failed: %s", err)
             return _error_result(file, f"Failed to initialise LLM client: {err}", context_level=context_level)
 
-    # Resolve verifier
-    if verifier is None:
+    # Project mode deliberately uses the Patch-level verifier instead of
+    # falling back to LocalVerifier, which cannot validate the full workspace.
+    patch_verifier = None
+    if project_workspace is not None:
+        adapter = RepairVerificationAdapter()
+
+        def verify_project_patch(patch: Patch) -> VerificationResult:
+            return adapter.verify_patch_result(
+                patch=patch,
+                original_file=resolved_project_file,
+                workspace=resolved_project_workspace,
+                test_timeout=project_test_timeout,
+            )
+
+        patch_verifier = verify_project_patch
+    elif verifier is None:
         try:
             verifier = LocalVerifier(test_code=test_code)
         except Exception as err:
@@ -187,6 +254,7 @@ def run_pipeline(
             max_attempts=max_attempts,
             functions=functions,
             extra_context=extra_context,
+            patch_verifier=patch_verifier,
         )
         try:
             outcomes = agent.repair_all(
@@ -209,6 +277,7 @@ def run_pipeline(
             diff_text = ""
             explanation = ""
             verification_stage = "none"
+            project_verification_reports = []
 
             patched_code = None
             patched_function = None
@@ -225,8 +294,16 @@ def run_pipeline(
                 last_attempt = outcome.attempts[-1]
                 if last_attempt.verification is not None:
                     verification_stage = last_attempt.verification.stage
+            for attempt in outcome.attempts:
+                if (
+                    attempt.verification is not None
+                    and attempt.verification.project_report is not None
+                ):
+                    project_verification_reports.append(
+                        attempt.verification.project_report
+                    )
 
-            repair_outcomes_raw.append({
+            repair_result = {
                 "finding": _finding_to_dict(sf.finding),
                 "patched_function": patched_function,
                 "patched_code": patched_code,
@@ -235,7 +312,12 @@ def run_pipeline(
                 "status": outcome.status,
                 "attempts": outcome.total_attempts,
                 "verification_stage": verification_stage,
-            })
+            }
+            if project_workspace is not None:
+                repair_result["project_verification_reports"] = (
+                    project_verification_reports
+                )
+            repair_outcomes_raw.append(repair_result)
     else:
         outcomes = []
 

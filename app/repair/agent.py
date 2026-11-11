@@ -1,8 +1,10 @@
 """High-level RepairAgent orchestrating code repairs across single or multiple findings."""
 
-from typing import Any
+from typing import Any, Callable
+
+from app.repair.schema import Patch
 from app.repair.retry import RepairOutcome, repair_with_retries
-from app.repair.verifier_interface import Verifier
+from app.repair.verifier_interface import VerificationResult, Verifier
 from app.review.llm_client import LLMClient
 from app.review.schema import Finding
 
@@ -12,17 +14,23 @@ class RepairAgent:
 
     def __init__(
         self,
-        verifier: Verifier,
+        verifier: Verifier | None = None,
         client: LLMClient | None = None,
         max_attempts: int = 3,
         functions: list[Any] | None = None,
         extra_context: str | None = None,
+        patch_verifier: Callable[[Patch], VerificationResult] | None = None,
     ) -> None:
+        if verifier is None and patch_verifier is None:
+            raise ValueError("A verifier or patch_verifier must be provided.")
+        if verifier is not None and patch_verifier is not None:
+            raise ValueError("Provide either verifier or patch_verifier, not both.")
         self.verifier = verifier
         self.client = client
         self.max_attempts = max_attempts
         self.functions = functions
         self.extra_context = extra_context
+        self.patch_verifier = patch_verifier
 
     def repair(
         self,
@@ -54,6 +62,7 @@ class RepairAgent:
             file_path=file_path,
             function_info=function_info,
             extra_context=ctx,
+            patch_verifier=self.patch_verifier,
         )
 
     def repair_all(

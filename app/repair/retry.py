@@ -1,7 +1,7 @@
 """Retry orchestration for automated code repair with verification feedback."""
 
 import logging
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 from pydantic import BaseModel, Field
 
 from app.repair.patch_generator import PatchGenerationError, generate_function_patch, generate_patch
@@ -45,12 +45,13 @@ class RepairOutcome(BaseModel):
 def repair_with_retries(
     code: str,
     finding: Finding,
-    verifier: Verifier,
+    verifier: Verifier | None = None,
     client: LLMClient | None = None,
     max_attempts: int = 3,
     file_path: str = "snippet.py",
     function_info: dict[str, Any] | Any | None = None,
     extra_context: str | None = None,
+    patch_verifier: Callable[[Patch], VerificationResult] | None = None,
 ) -> RepairOutcome:
     """Attempt to repair a finding in a loop, feeding verification failures back to the LLM.
 
@@ -58,6 +59,7 @@ def repair_with_retries(
         code: Full original source code.
         finding: Finding to repair.
         verifier: Verifier protocol implementation for checking patched code.
+        patch_verifier: Optional verifier receiving each generated Patch object.
         client: Optional LLMClient. Defaults to get_client().
         max_attempts: Maximum number of repair attempts before giving up (default 3).
         file_path: File path of the snippet being verified.
@@ -67,6 +69,11 @@ def repair_with_retries(
     Returns:
         RepairOutcome with status ('verified', 'failed', or 'skipped') and full attempt history.
     """
+    if verifier is None and patch_verifier is None:
+        raise ValueError("A verifier or patch_verifier must be provided.")
+    if verifier is not None and patch_verifier is not None:
+        raise ValueError("Provide either verifier or patch_verifier, not both.")
+
     if client is None:
         client = get_client()
 
@@ -137,7 +144,43 @@ def repair_with_retries(
         previous_patch = patch
 
         # Step 2: Verify patched code
-        verification = verifier.verify(patched_code=patch.fixed_code, file_path=file_path)
+        if patch_verifier is not None:
+            try:
+                verification = patch_verifier(patch)
+                if not isinstance(verification, VerificationResult):
+                    raise TypeError(
+                        "patch_verifier must return a VerificationResult."
+                    )
+            except Exception as err:
+                logger.exception("Patch verification callback failed")
+                callback_report = {
+                    "status": "error",
+                    "checks": {
+                        "project_verification": {
+                            "passed": False,
+                            "status": "error",
+                            "error": str(err),
+                        }
+                    },
+                    "failed_checks": ["project_verification"],
+                    "comparison": {
+                        "baseline_status": "unknown",
+                        "patched_status": "error",
+                        "assessment": "inconclusive",
+                    },
+                }
+                verification = VerificationResult(
+                    passed=False,
+                    stage="tests",
+                    error=f"Project verification callback failed: {err}",
+                    output=str(err),
+                    project_report=callback_report,
+                )
+        elif verifier is not None:
+            verification = verifier.verify(
+                patched_code=patch.fixed_code,
+                file_path=file_path,
+            )
         attempts.append(
             RepairAttempt(
                 attempt=attempt,
