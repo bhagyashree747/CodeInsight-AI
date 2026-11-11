@@ -1,0 +1,180 @@
+[
+  {
+    "file": "db_query.py",
+    "counts": {
+      "issues_detected": 2,
+      "kept": 2,
+      "filtered_as_noise": 0,
+      "by_severity": {
+        "high": 2
+      }
+    },
+    "findings": [
+      {
+        "file": "db_query.py",
+        "line": 6,
+        "category": "security",
+        "severity": "high",
+        "confidence": 0.96,
+        "description": "SQL injection vulnerability: the query is built using string interpolation with untrusted 'username', allowing an attacker to inject arbitrary SQL.",
+        "suggested_fix_hint": "Use parameterized queries: cursor.execute(\"SELECT * FROM users WHERE username = ?\", (username,))",
+        "actionable": true,
+        "score": 0.986
+      },
+      {
+        "file": "db_query.py",
+        "line": 10,
+        "category": "bug",
+        "severity": "high",
+        "confidence": 0.92,
+        "description": "Attempting to convert the fetched row to a dict with dict(row) raises a TypeError because sqlite3 returns a tuple by default, not a sequence of (key, value) pairs.",
+        "suggested_fix_hint": "Set a row_factory that returns Row objects (e.g., conn.row_factory = sqlite3.Row) and then use dict(row) or manually construct the dict from column names.",
+        "actionable": true,
+        "score": 0.972
+      }
+    ],
+    "discarded": [],
+    "repairs": [
+      {
+        "finding": {
+          "file": "db_query.py",
+          "line": 6,
+          "category": "security",
+          "severity": "high",
+          "confidence": 0.96,
+          "description": "SQL injection vulnerability: the query is built using string interpolation with untrusted 'username', allowing an attacker to inject arbitrary SQL.",
+          "suggested_fix_hint": "Use parameterized queries: cursor.execute(\"SELECT * FROM users WHERE username = ?\", (username,))",
+          "actionable": true
+        },
+        "status": "verified",
+        "attempts": 1,
+        "diff": "--- a/db_query.py\n+++ b/db_query.py\n@@ -3,8 +3,8 @@\n def get_user(username: str) -> dict | None:\n     conn = sqlite3.connect(\"app.db\")\n     cursor = conn.cursor()\n-    query = f\"SELECT * FROM users WHERE username = '{username}'\"\n-    cursor.execute(query)\n+    query = \"SELECT * FROM users WHERE username = ?\"\n+    cursor.execute(query, (username,))\n     row = cursor.fetchone()\n     conn.close()\n-    return dict(row) if row else None\n+    return dict(row) if row else None",
+        "explanation": "Replaced string interpolation with a parameterized query and passed the username as a parameter to prevent SQL injection.",
+        "verification_stage": "none"
+      },
+      {
+        "finding": {
+          "file": "db_query.py",
+          "line": 10,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.92,
+          "description": "Attempting to convert the fetched row to a dict with dict(row) raises a TypeError because sqlite3 returns a tuple by default, not a sequence of (key, value) pairs.",
+          "suggested_fix_hint": "Set a row_factory that returns Row objects (e.g., conn.row_factory = sqlite3.Row) and then use dict(row) or manually construct the dict from column names.",
+          "actionable": true
+        },
+        "status": "verified",
+        "attempts": 1,
+        "diff": "--- a/db_query.py\n+++ b/db_query.py\n@@ -2,6 +2,7 @@\n \n def get_user(username: str) -> dict | None:\n     conn = sqlite3.connect(\"app.db\")\n+    conn.row_factory = sqlite3.Row\n     cursor = conn.cursor()\n     query = \"SELECT * FROM users WHERE username = ?\"\n     cursor.execute(query, (username,))\n",
+        "explanation": "Added conn.row_factory = sqlite3.Row so fetched rows behave like mappings, allowing dict(row) without error.",
+        "verification_stage": "none"
+      }
+    ],
+    "summary": {
+      "verified": 2,
+      "failed": 0,
+      "retried": 0
+    },
+    "label": "SQL Injection"
+  },
+  {
+    "file": "statistics.py",
+    "counts": {
+      "issues_detected": 1,
+      "kept": 1,
+      "filtered_as_noise": 0,
+      "by_severity": {
+        "high": 1
+      }
+    },
+    "findings": [
+      {
+        "file": "statistics.py",
+        "line": 3,
+        "category": "bug",
+        "severity": "high",
+        "confidence": 0.97,
+        "description": "ZeroDivisionError occurs when 'values' is an empty list because division by len(values) is performed without checking for zero length.",
+        "suggested_fix_hint": "Add a guard before division, e.g., if not values: raise ValueError('Cannot compute average of empty list') or return 0.0.",
+        "actionable": true,
+        "score": 0.9895
+      }
+    ],
+    "discarded": [],
+    "repairs": [
+      {
+        "finding": {
+          "file": "statistics.py",
+          "line": 3,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.97,
+          "description": "ZeroDivisionError occurs when 'values' is an empty list because division by len(values) is performed without checking for zero length.",
+          "suggested_fix_hint": "Add a guard before division, e.g., if not values: raise ValueError('Cannot compute average of empty list') or return 0.0.",
+          "actionable": true
+        },
+        "status": "verified",
+        "attempts": 1,
+        "diff": "--- a/statistics.py\n+++ b/statistics.py\n@@ -1,3 +1,5 @@\n def compute_average(values: list[float]) -> float:\n     total = sum(values)\n+    if not values:\n+        raise ValueError('Cannot compute average of empty list')\n     return total / len(values)\n",
+        "explanation": "Added a guard that raises a ValueError when the input list is empty, preventing a ZeroDivisionError.",
+        "verification_stage": "none"
+      }
+    ],
+    "summary": {
+      "verified": 1,
+      "failed": 0,
+      "retried": 0
+    },
+    "label": "Division by Zero"
+  },
+  {
+    "file": "utils.py",
+    "counts": {
+      "issues_detected": 1,
+      "kept": 1,
+      "filtered_as_noise": 0,
+      "by_severity": {
+        "high": 1
+      }
+    },
+    "findings": [
+      {
+        "file": "utils.py",
+        "line": 1,
+        "category": "bug",
+        "severity": "high",
+        "confidence": 0.95,
+        "description": "Mutable default argument 'collection' is shared across function calls, causing items to accumulate unexpectedly.",
+        "suggested_fix_hint": "Change the default to None and initialize inside the function: def append_item(item: str, collection: list[str] | None = None) -> list[str]:\n    if collection is None:\n        collection = []\n    collection.append(item)\n    return collection",
+        "actionable": true,
+        "score": 0.9825
+      }
+    ],
+    "discarded": [],
+    "repairs": [
+      {
+        "finding": {
+          "file": "utils.py",
+          "line": 1,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.95,
+          "description": "Mutable default argument 'collection' is shared across function calls, causing items to accumulate unexpectedly.",
+          "suggested_fix_hint": "Change the default to None and initialize inside the function: def append_item(item: str, collection: list[str] | None = None) -> list[str]:\n    if collection is None:\n        collection = []\n    collection.append(item)\n    return collection",
+          "actionable": true
+        },
+        "status": "verified",
+        "attempts": 1,
+        "diff": "--- a/utils.py\n+++ b/utils.py\n@@ -1,3 +1,5 @@\n-def append_item(item: str, collection: list[str] = []) -> list[str]:\n+def append_item(item: str, collection: list[str] | None = None) -> list[str]:\n+    if collection is None:\n+        collection = []\n     collection.append(item)\n-    return collection\n+    return collection",
+        "explanation": "Replaced the mutable list default with None and initialized a new list inside the function to avoid shared state across calls.",
+        "verification_stage": "none"
+      }
+    ],
+    "summary": {
+      "verified": 1,
+      "failed": 0,
+      "retried": 0
+    },
+    "label": "Mutable Default Argument"
+  }
+]
