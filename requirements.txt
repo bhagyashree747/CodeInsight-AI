@@ -2,3 +2,5 @@ pydantic
 httpx
 pytest
 python-dotenv
+
+matplotlib
