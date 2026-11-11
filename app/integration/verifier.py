@@ -5,13 +5,13 @@ import tempfile
 import time
 from dataclasses import dataclass
 
-try:  # Member 1's class, once the branches are merged
+try:  # Member 1's class (a pydantic model: passed, stage in syntax/lint/tests/none, error, output)
     from app.repair.verifier_interface import VerificationResult
 except ImportError:
     @dataclass
     class VerificationResult:
         passed: bool
-        stage: str
+        stage: str = "none"
         error: str = ""
         output: str = ""
 
@@ -90,7 +90,8 @@ def _summary(output):
 
 class FailToPassVerifier:
     """Plugs into Member 1's retry loop: verify(patched_code, file_path) -> VerificationResult.
-    Stage 1: syntax check. Stage 2: run the fail-to-pass tests in the temp workspace."""
+    Stage 1: syntax check. Stage 2: run the fail-to-pass tests in the temp workspace.
+    Result stages follow Member 1's convention: 'syntax' or 'tests' when failing, 'none' when passed."""
 
     def __init__(self, workspace, python, test_ids, file_path, original_source,
                  window=None, timeout=300, import_name="requests"):
@@ -132,7 +133,8 @@ class FailToPassVerifier:
         if not self.setup_checked:
             problem = check_import(self.python, self.workspace.path, self.import_name)
             if problem:
-                return VerificationResult(passed=False, stage="setup", error=problem, output="")
+                return VerificationResult(passed=False, stage="tests",
+                                          error=f"SETUP PROBLEM: {problem}", output="")
             self.setup_checked = True
 
         self.workspace.write(self.file_path, full)
@@ -149,6 +151,6 @@ class FailToPassVerifier:
                              if l.startswith("FAILED ") and len(l.split(" ")) > 1],
         }
         if code == 0:
-            return VerificationResult(passed=True, stage="tests", error="", output=_tail(output))
+            return VerificationResult(passed=True, stage="none", error="", output=_tail(output))
         return VerificationResult(passed=False, stage="tests",
                                   error=_summary(output), output=_tail(output))
