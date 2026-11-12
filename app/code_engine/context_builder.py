@@ -7,7 +7,7 @@ LEVELS = ("diff", "function", "file")
 
 MODULE_WINDOW = 5        # lines of padding around changes that are outside any function
 NON_PY_WINDOW = 15       # padding for non-Python files at "function" level
-MAX_FILE_CHARS = 40000   # "file" level: bigger files are trimmed to about this size
+MAX_FILE_CHARS = 12000   # "file" level: bigger files are trimmed to about this size
 TRIM_RADIUS = 200        # starting padding when trimming a big file (shrinks if it does not fit)
 DEFAULT_MAX_FILES = 30   # PRs with more changed files than this get cut off
 
