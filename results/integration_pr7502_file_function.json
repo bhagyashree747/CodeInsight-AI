@@ -1,0 +1,37 @@
+{
+  "pr": 7502,
+  "level": "file",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/models.py",
+      "context_level": "file",
+      "counts": {
+        "issues_detected": 1,
+        "kept": 0,
+        "filtered_as_noise": 1,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [
+        {
+          "file": "src/requests/models.py",
+          "line": 33,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.9,
+          "description": "Decoding a field name with `field.decode('utf-8')` assumes the bytes are valid UTF-8. If a non\u2011UTF\u20118 byte sequence is supplied (e.g., arbitrary binary data), a UnicodeDecodeError will be raised, causing request preparation to crash.",
+          "suggested_fix_hint": "Decode with error handling, e.g.: `field.decode('utf-8', errors='replace')` or validate that field names are UTF-8 before decoding.",
+          "actionable": true,
+          "reason": "Line 33 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}

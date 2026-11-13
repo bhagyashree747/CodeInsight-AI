@@ -1,0 +1,25 @@
+{
+  "pr": 7205,
+  "level": "diff",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/utils.py",
+      "context_level": "diff",
+      "counts": {
+        "issues_detected": 0,
+        "kept": 0,
+        "filtered_as_noise": 0,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}

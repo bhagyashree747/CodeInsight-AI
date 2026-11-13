@@ -1,0 +1,37 @@
+{
+  "pr": 7205,
+  "level": "none",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/utils.py",
+      "context_level": null,
+      "counts": {
+        "issues_detected": 1,
+        "kept": 0,
+        "filtered_as_noise": 1,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [
+        {
+          "file": "src/requests/utils.py",
+          "line": 29,
+          "category": "bug",
+          "severity": "medium",
+          "confidence": 0.86,
+          "description": "Calling netrc.authenticators with a None hostname (when the URL lacks a host) raises a TypeError, causing the function to crash for URLs like \"http://\" or malformed inputs.",
+          "suggested_fix_hint": "Validate that 'host' is not None before invoking netrc.authenticators, e.g.,\nif host is None:\n    return\n# then proceed with netrc lookup",
+          "actionable": true,
+          "reason": "Line 29 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}

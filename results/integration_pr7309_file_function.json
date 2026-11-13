@@ -1,0 +1,59 @@
+{
+  "pr": 7309,
+  "level": "file",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/utils.py",
+      "context_level": "file",
+      "counts": {
+        "issues_detected": 1,
+        "kept": 1,
+        "filtered_as_noise": 0,
+        "by_severity": {
+          "high": 1
+        }
+      },
+      "findings": [
+        {
+          "file": "src/requests/utils.py",
+          "line": 17,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.9,
+          "description": "When a parameter in the Content-Type header lacks an '=', the code assigns the boolean True to 'value'. Subsequent code (e.g., get_encoding_from_headers) expects string values and calls .strip() on them, which will raise an AttributeError for True. Missing values should be represented as None or an empty string, not a boolean.",
+          "suggested_fix_hint": "Initialize 'value' to None (or an empty string) instead of True: replace 'key, value = param, True' with 'key, value = param, None'. Ensure downstream code handles None appropriately.",
+          "actionable": true,
+          "score": 0.965
+        }
+      ],
+      "discarded": [],
+      "repairs": [
+        {
+          "finding": {
+            "file": "src/requests/utils.py",
+            "line": 17,
+            "category": "bug",
+            "severity": "high",
+            "confidence": 0.9,
+            "description": "When a parameter in the Content-Type header lacks an '=', the code assigns the boolean True to 'value'. Subsequent code (e.g., get_encoding_from_headers) expects string values and calls .strip() on them, which will raise an AttributeError for True. Missing values should be represented as None or an empty string, not a boolean.",
+            "suggested_fix_hint": "Initialize 'value' to None (or an empty string) instead of True: replace 'key, value = param, True' with 'key, value = param, None'. Ensure downstream code handles None appropriately.",
+            "actionable": true
+          },
+          "patched_function": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    items_to_strip = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if not param:\n            continue\n        index_of_equals = param.find(\"=\")\n        if index_of_equals == -1:\n            # Parameter without a value; ignore it.\n            continue\n        key = param[:index_of_equals].strip(items_to_strip)\n        value = param[index_of_equals + 1 :].strip(items_to_strip)\n        if value == \"\":\n            # Empty value; treat as missing and ignore.\n            continue\n        params_dict[key.lower()] = value\n    return content_type, params_dict",
+          "patched_code": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    items_to_strip = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if not param:\n            continue\n        index_of_equals = param.find(\"=\")\n        if index_of_equals == -1:\n            # Parameter without a value; ignore it.\n            continue\n        key = param[:index_of_equals].strip(items_to_strip)\n        value = param[index_of_equals + 1 :].strip(items_to_strip)\n        if value == \"\":\n            # Empty value; treat as missing and ignore.\n            continue\n        params_dict[key.lower()] = value\n    return content_type, params_dict",
+          "diff": "--- a/src/requests/utils.py\n+++ b/src/requests/utils.py\n@@ -13,11 +13,16 @@\n \n     for param in params:\n         param = param.strip()\n-        if param:\n-            key, value = param, True\n-            index_of_equals = param.find(\"=\")\n-            if index_of_equals != -1:\n-                key = param[:index_of_equals].strip(items_to_strip)\n-                value = param[index_of_equals + 1 :].strip(items_to_strip)\n-            params_dict[key.lower()] = value\n+        if not param:\n+            continue\n+        index_of_equals = param.find(\"=\")\n+        if index_of_equals == -1:\n+            # Parameter without a value; ignore it.\n+            continue\n+        key = param[:index_of_equals].strip(items_to_strip)\n+        value = param[index_of_equals + 1 :].strip(items_to_strip)\n+        if value == \"\":\n+            # Empty value; treat as missing and ignore.\n+            continue\n+        params_dict[key.lower()] = value\n     return content_type, params_dict",
+          "explanation": "Parameters without an '=' or with an empty value are now ignored, preventing non\u2011string values from being added and ensuring downstream code receives only valid string parameters.",
+          "status": "verified",
+          "attempts": 2,
+          "verification_stage": "none"
+        }
+      ],
+      "summary": {
+        "verified": 1,
+        "failed": 0,
+        "retried": 1
+      }
+    }
+  ]
+}

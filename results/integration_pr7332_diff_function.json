@@ -1,0 +1,48 @@
+{
+  "pr": 7332,
+  "level": "diff",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/auth.py",
+      "context_level": "diff",
+      "counts": {
+        "issues_detected": 2,
+        "kept": 0,
+        "filtered_as_noise": 2,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [
+        {
+          "file": "src/requests/auth.py",
+          "line": 86,
+          "category": "logic",
+          "severity": "high",
+          "confidence": 0.86,
+          "description": "The qop handling treats any qop value that contains the substring \"auth\" as the simple \"auth\" mode, ignoring other possible qop values such as \"auth-int\". This can produce an incorrect response digest for supported qop types and cause authentication failures.",
+          "suggested_fix_hint": "Parse the qop header properly and handle each supported value explicitly, e.g.,\n```python\nif qop == \"auth\":\n    noncebit = f\"{nonce}:{ncvalue}:{cnonce}:auth:{HA2}\"\n    respdig = KD(HA1, noncebit)\nelif qop == \"auth-int\":\n    # compute HA2 with entity body hash and include it\n    ...\nelse:\n    return None\n```",
+          "actionable": true,
+          "reason": "Line 86 is outside changed lines in PR diff"
+        },
+        {
+          "file": "src/requests/auth.py",
+          "line": 107,
+          "category": "logic",
+          "severity": "medium",
+          "confidence": 0.81,
+          "description": "When constructing the Authorization header, the code always inserts `qop=\"auth\"` regardless of the actual qop value negotiated with the server. If the server selected a different qop (e.g., \"auth-int\"), the header will be inconsistent with the computed digest.",
+          "suggested_fix_hint": "Use the actual qop value that was processed earlier, e.g.,\n```python\nif qop:\n    qop_value = qop.split(',')[0].strip()\n    base += f', qop=\"{qop_value}\", nc={ncvalue}, cnonce=\"{cnonce}\"'\n```",
+          "actionable": true,
+          "reason": "Line 107 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}

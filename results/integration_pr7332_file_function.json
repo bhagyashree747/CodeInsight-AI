@@ -1,0 +1,48 @@
+{
+  "pr": 7332,
+  "level": "file",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/auth.py",
+      "context_level": "file",
+      "counts": {
+        "issues_detected": 2,
+        "kept": 0,
+        "filtered_as_noise": 2,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [
+        {
+          "file": "src/requests/auth.py",
+          "line": 86,
+          "category": "logic",
+          "severity": "medium",
+          "confidence": 0.9,
+          "description": "The qop handling is case\u2011sensitive and only matches the exact string \"auth\". RFC 2617 specifies that qop tokens are case\u2011insensitive, so values like \"Auth\" or \"AUTH\" will be incorrectly rejected, causing authentication to fail.",
+          "suggested_fix_hint": "Normalize qop to lower case before comparison, e.g., `qop_lower = qop.lower()` and then check `if qop_lower == \"auth\" or \"auth\" in [v.strip() for v in qop_lower.split(\",\")]`.",
+          "actionable": true,
+          "reason": "Line 86 is outside changed lines in PR diff"
+        },
+        {
+          "file": "src/requests/auth.py",
+          "line": 107,
+          "category": "logic",
+          "severity": "medium",
+          "confidence": 0.9,
+          "description": "When a qop value other than \"auth\" (e.g., \"auth-int\") is received, the code still inserts `qop=\"auth\"` into the Authorization header, producing an inconsistent header that does not reflect the negotiated qop.",
+          "suggested_fix_hint": "Use the actual qop token from the challenge (or the selected token) when building the header, e.g., `selected_qop = \"auth\" if \"auth\" in qop.split(\",\") else qop.split(\",\")[0]` and then `base += f', qop=\"{selected_qop}\", nc={ncvalue}, cnonce=\"{cnonce}\"'`.",
+          "actionable": true,
+          "reason": "Line 107 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}

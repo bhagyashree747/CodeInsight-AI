@@ -1,0 +1,71 @@
+{
+  "pr": 7502,
+  "level": "diff",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/models.py",
+      "context_level": "diff",
+      "counts": {
+        "issues_detected": 2,
+        "kept": 1,
+        "filtered_as_noise": 1,
+        "by_severity": {
+          "low": 1
+        }
+      },
+      "findings": [
+        {
+          "file": "src/requests/models.py",
+          "line": 57,
+          "category": "bug",
+          "severity": "low",
+          "confidence": 0.75,
+          "description": "If `fp.read()` returns a `str` (e.g., a text-mode file), `fdata` will be a string while later processing expects bytes, potentially causing encoding errors.",
+          "suggested_fix_hint": "Ensure the read data is bytes, e.g., `fdata = fp.read(); if isinstance(fdata, str): fdata = fdata.encode('utf-8')`.",
+          "actionable": true,
+          "score": 0.6675
+        }
+      ],
+      "discarded": [
+        {
+          "file": "src/requests/models.py",
+          "line": 55,
+          "category": "bug",
+          "severity": "medium",
+          "confidence": 0.88,
+          "description": "When a file value is a string (interpreted as a file path), the code assigns the path string directly to `fdata` (line 55). This causes the multipart body to contain the literal path instead of the file's contents, and may also raise a TypeError later if the encoder expects bytes. The intended behavior is to read the file's bytes.",
+          "suggested_fix_hint": "Detect string file paths and open them in binary mode, e.g.:\\n```python\\nif isinstance(fp, (str, bytes, bytearray)):\\n    if isinstance(fp, str):\\n        with open(fp, 'rb') as fh_obj:\\n            fdata = fh_obj.read()\\n    else:\\n        fdata = fp\\n```\\nAlternatively, raise a clear error if a string is passed where a file-like object is required.",
+          "actionable": true,
+          "reason": "Line 55 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [
+        {
+          "finding": {
+            "file": "src/requests/models.py",
+            "line": 57,
+            "category": "bug",
+            "severity": "low",
+            "confidence": 0.75,
+            "description": "If `fp.read()` returns a `str` (e.g., a text-mode file), `fdata` will be a string while later processing expects bytes, potentially causing encoding errors.",
+            "suggested_fix_hint": "Ensure the read data is bytes, e.g., `fdata = fp.read(); if isinstance(fdata, str): fdata = fdata.encode('utf-8')`.",
+            "actionable": true
+          },
+          "patched_function": "    @staticmethod\n    def _encode_files(\n        files: _t.FilesType, data: _t.RawDataType | None\n    ) -> tuple[bytes, str]:\n        \"\"\"Build the body for a multipart/form-data request.\n\n        Will successfully encode files when passed as a dict or a list of\n        tuples. Order is retained if data is a list of tuples but arbitrary\n        if parameters are supplied as a dict.\n        The tuples may be 2-tuples (filename, fileobj), 3-tuples (filename, fileobj, contentype)\n        or 4-tuples (filename, fileobj, contentype, custom_headers).\n        \"\"\"\n        if not files:\n            raise ValueError(\"Files must be provided.\")\n        elif isinstance(data, basestring):\n            raise ValueError(\"Data must not be a string.\")\n\n        new_fields: list[RequestField | tuple[str, bytes]] = []\n        fields = to_key_val_list(data or {})\n        files = to_key_val_list(files or {})\n\n        for field, val in fields:\n            if isinstance(val, basestring) or not hasattr(val, \"__iter__\"):\n                val = [val]\n            for v in val:\n                if v is not None:\n                    # Don't call str() on bytestrings: in Py3 it all goes wrong.\n                    if not isinstance(v, bytes):\n                        v = str(v)\n\n                    new_fields.append(\n                        (\n                            field.decode(\"utf-8\")\n                            if isinstance(field, bytes)\n                            else field,\n                            v.encode(\"utf-8\") if isinstance(v, str) else v,\n                        )\n                    )\n\n        for k, v in files:\n            # support for explicit filename\n            ft = None\n            fh = None\n            if isinstance(v, (tuple, list)):\n                if len(v) == 2:\n                    fn, fp = v\n                elif len(v) == 3:\n                    fn, fp, ft = v\n                else:\n                    fn, fp, ft, fh = v\n            else:\n                fn = guess_filename(v) or k\n                fp = v\n\n            if isinstance(fp, (str, bytes, bytearray)):\n                fdata = fp\n            elif hasattr(fp, \"read\") and callable(fp.read):  # defensive check for file\u2011like objects\n                fdata = fp.read()\n                if isinstance(fdata, str):\n                    fdata = fdata.encode(\"utf-8\")\n            elif fp is None:  # defensive check for untyped callers\n                continue\n            else:\n                fdata = fp\n\n            rf = RequestField(name=k, data=fdata, filename=fn, headers=fh)\n            rf.make_multipart(content_type=ft)\n            new_fields.append(rf)\n\n        body, content_type = encode_multipart_formdata(new_fields)\n\n        return body, content_type",
+          "patched_code": "    @staticmethod\n    def _encode_files(\n        files: _t.FilesType, data: _t.RawDataType | None\n    ) -> tuple[bytes, str]:\n        \"\"\"Build the body for a multipart/form-data request.\n\n        Will successfully encode files when passed as a dict or a list of\n        tuples. Order is retained if data is a list of tuples but arbitrary\n        if parameters are supplied as a dict.\n        The tuples may be 2-tuples (filename, fileobj), 3-tuples (filename, fileobj, contentype)\n        or 4-tuples (filename, fileobj, contentype, custom_headers).\n        \"\"\"\n        if not files:\n            raise ValueError(\"Files must be provided.\")\n        elif isinstance(data, basestring):\n            raise ValueError(\"Data must not be a string.\")\n\n        new_fields: list[RequestField | tuple[str, bytes]] = []\n        fields = to_key_val_list(data or {})\n        files = to_key_val_list(files or {})\n\n        for field, val in fields:\n            if isinstance(val, basestring) or not hasattr(val, \"__iter__\"):\n                val = [val]\n            for v in val:\n                if v is not None:\n                    # Don't call str() on bytestrings: in Py3 it all goes wrong.\n                    if not isinstance(v, bytes):\n                        v = str(v)\n\n                    new_fields.append(\n                        (\n                            field.decode(\"utf-8\")\n                            if isinstance(field, bytes)\n                            else field,\n                            v.encode(\"utf-8\") if isinstance(v, str) else v,\n                        )\n                    )\n\n        for k, v in files:\n            # support for explicit filename\n            ft = None\n            fh = None\n            if isinstance(v, (tuple, list)):\n                if len(v) == 2:\n                    fn, fp = v\n                elif len(v) == 3:\n                    fn, fp, ft = v\n                else:\n                    fn, fp, ft, fh = v\n            else:\n                fn = guess_filename(v) or k\n                fp = v\n\n            if isinstance(fp, (str, bytes, bytearray)):\n                fdata = fp\n            elif hasattr(fp, \"read\") and callable(fp.read):  # defensive check for file\u2011like objects\n                fdata = fp.read()\n                if isinstance(fdata, str):\n                    fdata = fdata.encode(\"utf-8\")\n            elif fp is None:  # defensive check for untyped callers\n                continue\n            else:\n                fdata = fp\n\n            rf = RequestField(name=k, data=fdata, filename=fn, headers=fh)\n            rf.make_multipart(content_type=ft)\n            new_fields.append(rf)\n\n        body, content_type = encode_multipart_formdata(new_fields)\n\n        return body, content_type",
+          "diff": "--- a/src/requests/models.py\n+++ b/src/requests/models.py\n@@ -54,8 +54,10 @@\n \n             if isinstance(fp, (str, bytes, bytearray)):\n                 fdata = fp\n-            elif isinstance(fp, _SupportsRead):  # defensive check for untyped callers\n+            elif hasattr(fp, \"read\") and callable(fp.read):  # defensive check for file\u2011like objects\n                 fdata = fp.read()\n+                if isinstance(fdata, str):\n+                    fdata = fdata.encode(\"utf-8\")\n             elif fp is None:  # defensive check for untyped callers\n                 continue\n             else:\n",
+          "explanation": "Replaced the isinstance check with a hasattr/read callable test to correctly handle file\u2011like objects (e.g., TemporaryFileWrapper) and ensured any string data read from them is encoded to bytes.",
+          "status": "verified",
+          "attempts": 2,
+          "verification_stage": "none"
+        }
+      ],
+      "summary": {
+        "verified": 1,
+        "failed": 0,
+        "retried": 1
+      }
+    }
+  ]
+}

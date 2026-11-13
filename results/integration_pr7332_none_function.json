@@ -1,0 +1,37 @@
+{
+  "pr": 7332,
+  "level": "none",
+  "code_scope": "function",
+  "results": [
+    {
+      "file": "src/requests/auth.py",
+      "context_level": null,
+      "counts": {
+        "issues_detected": 1,
+        "kept": 0,
+        "filtered_as_noise": 1,
+        "by_severity": {}
+      },
+      "findings": [],
+      "discarded": [
+        {
+          "file": "src/requests/auth.py",
+          "line": 70,
+          "category": "bug",
+          "severity": "high",
+          "confidence": 0.88,
+          "description": "Accessing `self._thread_local.last_nonce` and `self._thread_local.nonce_count` without ensuring they exist can raise AttributeError on the first request, causing the authentication process to crash.",
+          "suggested_fix_hint": "Initialize these attributes when the thread-local storage is created, e.g., in the class __init__: `self._thread_local.last_nonce = None; self._thread_local.nonce_count = 0`. Or use `getattr(self._thread_local, 'last_nonce', None)` and `self._thread_local.nonce_count = getattr(self._thread_local, 'nonce_count', 0) + 1`.",
+          "actionable": true,
+          "reason": "Line 70 is outside changed lines in PR diff"
+        }
+      ],
+      "repairs": [],
+      "summary": {
+        "verified": 0,
+        "failed": 0,
+        "retried": 0
+      }
+    }
+  ]
+}
