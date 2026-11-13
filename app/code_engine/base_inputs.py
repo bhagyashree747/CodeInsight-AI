@@ -1,4 +1,4 @@
-from app.code_engine.context_builder import _file_units, _function_units, _window_units
+from app.code_engine.context_builder import _function_units, _window_units
 from app.code_engine.diff import build_file_diffs
 from app.code_engine.review_input import (
     DEFAULT_MAX_CHARS,
@@ -7,6 +7,10 @@ from app.code_engine.review_input import (
     _functions_for,
     _pick_window,
 )
+
+# The Groq free tier rejects requests above about 8,000 tokens per minute, so the extra
+# context is capped lower than the 12,000 chars agreed earlier.
+HINT_MAX_CHARS = 8000
 
 
 def is_test_file(path):
@@ -30,19 +34,47 @@ def base_changed_lines(file_diff):
     return sorted(n for n in touched if n and n > 0)
 
 
-def build_hint(level, source, changed):
+def _plain(units, lines):
+    """Unit texts WITHOUT line numbers: `code` is numbered from 1, so numbers in the hint would confuse the model."""
+    parts = []
+    for u in units:
+        label = u["kind"]
+        if u["function"]:
+            label += f" {u['function']}"
+        if u["class"]:
+            label += f" (class {u['class']})"
+        parts.append(f"# {label}\n" + "\n".join(lines[u["start_line"] - 1:u["end_line"]]))
+    return "\n\n".join(parts)
+
+
+def _file_hint_units(lines, changed, cap):
+    """Windows around the changes, with the padding halved until the text fits the cap."""
+    radius = 200
+    while True:
+        units = _window_units(lines, changed, radius)
+        size = sum(len(l) + 1 for u in units for l in lines[u["start_line"] - 1:u["end_line"]])
+        if size <= cap or radius <= 3:
+            return units
+        radius //= 2
+
+
+def build_hint(level, source, changed, max_chars=HINT_MAX_CHARS):
     """Extra context for the AI at a given level, built from the BASE (pre-fix) code only.
-    It never contains the PR's real patch: that would give away the answer."""
+    It never contains the PR's real patch (that would give away the answer) and has no line numbers."""
     lines = source.splitlines()
-    if level == "diff":          # "localized region": only the lines the fix touches, plus 3 around
+    if level == "diff":          # "changed region": only the lines the fix touches, plus 3 around
         units = _window_units(lines, changed, 3)
+        for u in units:
+            u["kind"] = "changed region"
     elif level == "function":
         units = _function_units(source, changed, True)
     elif level == "file":
-        units = _file_units(source, changed)
+        units = _file_hint_units(lines, changed, max_chars)
+        for u in units:
+            u["kind"] = "file excerpt"
     else:
         return None
-    return "\n\n".join(u["text"] for u in units)
+    return _plain(units, lines)
 
 
 def build_base_inputs(pr, client, max_chars=DEFAULT_MAX_CHARS, max_files=DEFAULT_MAX_FILES):
