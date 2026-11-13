@@ -319,3 +319,34 @@ Names were not available in the repository documentation; replace these placehol
 ## License
 
 No license has been specified in this repository. All rights and permissions should be confirmed with the project maintainers before reuse or redistribution.
+
+
+## Code intelligence and evaluation (Member 2)
+
+Run from the project root with the venv active. `.env` needs `GITHUB_TOKEN` (a personal access token, no scopes).
+
+**Look at a PR**
+- `python run_day1.py <pr_url>`: changed files of a PR.
+- `python run_functions_test.py <pr_url>`: changed functions per file.
+- `from app.code_engine.interface import get_review_inputs`: one record per changed file for the AI pipeline.
+
+**Evaluation set**
+- `docs/eval_prs.txt` and `docs/eval_prs.json`: 13 psf/requests PRs verified fail-to-pass, with their tests.
+- `python run_candidates.py <file>`: screen PR URLs.
+- `python run_failtopass.py <pr_url> --python <test env python.exe>`: prove a PR fails before and passes after its fix.
+
+**Test environment (once per target repo)**
+```
+python run_day6.py checkout <pr_url>          # shallow clone of the base commit into workspace/
+python -m venv workspace\env_requests
+workspace\env_requests\Scripts\activate
+cd workspace\psf__requests__pr<N>
+pip install -r requirements-dev.txt
+cd ..\..                                       # then re-activate the project venv
+```
+
+**Run the AI repair experiment** (needs the five `LLM_*` variables in `.env`, see `.env.example`)
+- `python run_integration.py check <pr_url> --python <test env python.exe>`: baseline vs human fix, no AI.
+- `python run_integration.py run <pr_url> --python <test env python.exe> --level none|diff|file --code-scope function`
+- Results go to `results/integration_*.json`; `python run_results_table.py` prints the summary table.
+- Never commit `.env`. Groq's free tier allows about 8,000 tokens per minute, so leave about 100 seconds between runs.

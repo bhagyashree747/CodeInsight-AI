@@ -1,40 +1,40 @@
 pr,title,level,chars,approx_tokens,files,fell_back_to_diff
 7332,Preserve semicolons in digest auth URI,diff,1472,368,2,0
 7332,Preserve semicolons in digest auth URI,function,5674,1418,2,0
-7332,Preserve semicolons in digest auth URI,file,12891,3222,2,1
+7332,Preserve semicolons in digest auth URI,file,20790,5197,2,0
 7296,fix: handle UTF-8 bytes credentials in HTTPDigestAuth,diff,2613,653,2,0
 7296,fix: handle UTF-8 bytes credentials in HTTPDigestAuth,function,6591,1647,2,0
-7296,fix: handle UTF-8 bytes credentials in HTTPDigestAuth,file,26013,6503,2,0
+7296,fix: handle UTF-8 bytes credentials in HTTPDigestAuth,file,21069,5267,2,0
 7553,Validate timeout type before passing to urllib3,diff,1194,298,2,0
 7553,Validate timeout type before passing to urllib3,function,6359,1589,2,0
-7553,Validate timeout type before passing to urllib3,file,47674,11918,2,0
+7553,Validate timeout type before passing to urllib3,file,19714,4928,2,0
 7501,fix: preserve explicit Cookie headers on same-origin redirects,diff,1630,407,2,0
 7501,fix: preserve explicit Cookie headers on same-origin redirects,function,8065,2016,2,0
-7501,fix: preserve explicit Cookie headers on same-origin redirects,file,57385,14346,2,0
+7501,fix: preserve explicit Cookie headers on same-origin redirects,file,19254,4813,2,0
 7230,fix: MockResponse.getheaders() always returned None and raises AttributeError on real calls,diff,5488,1372,2,0
 7230,fix: MockResponse.getheaders() always returned None and raises AttributeError on real calls,function,11175,2793,2,0
-7230,fix: MockResponse.getheaders() always returned None and raises AttributeError on real calls,file,42586,10646,2,0
+7230,fix: MockResponse.getheaders() always returned None and raises AttributeError on real calls,file,21036,5259,2,0
 7541,Parse standard cookie Expires dates from Morsel,diff,2080,520,2,0
 7541,Parse standard cookie Expires dates from Morsel,function,4033,1008,2,0
-7541,Parse standard cookie Expires dates from Morsel,file,49233,12308,2,0
+7541,Parse standard cookie Expires dates from Morsel,file,17709,4427,2,0
 7346,Preserve empty cookie values in RequestsCookieJar,diff,1000,250,2,0
 7346,Preserve empty cookie values in RequestsCookieJar,function,2526,631,2,0
-7346,Preserve empty cookie values in RequestsCookieJar,file,37300,9325,2,0
+7346,Preserve empty cookie values in RequestsCookieJar,file,16050,4012,2,0
 7303,Fix #7003: RequestsCookieJar.get() now returns falsy cookie values,diff,1725,431,2,0
 7303,Fix #7003: RequestsCookieJar.get() now returns falsy cookie values,function,3324,831,2,0
-7303,Fix #7003: RequestsCookieJar.get() now returns falsy cookie values,file,38180,9545,2,0
+7303,Fix #7003: RequestsCookieJar.get() now returns falsy cookie values,file,16956,4239,2,0
 7398,Handle None-valued method cookies as removals,diff,3153,788,3,0
 7398,Handle None-valued method cookies as removals,function,5913,1478,3,0
-7398,Handle None-valued method cookies as removals,file,78322,19580,3,0
+7398,Handle None-valued method cookies as removals,file,25153,6288,3,0
 7309,Fix malformed value parsing for Content-Type,diff,2679,669,2,0
 7309,Fix malformed value parsing for Content-Type,function,3869,967,2,0
-7309,Fix malformed value parsing for Content-Type,file,73901,18475,2,0
+7309,Fix malformed value parsing for Content-Type,file,16676,4169,2,0
 7205,Fix empty netrc entry usage,diff,1141,285,2,0
 7205,Fix empty netrc entry usage,function,2634,658,2,0
-7205,Fix empty netrc entry usage,file,74143,18535,2,0
+7205,Fix empty netrc entry usage,file,15904,3976,2,0
 7502,Fix `_encode_files` detection for `__getattr__`-based file wrappers,diff,1245,311,2,0
 7502,Fix `_encode_files` detection for `__getattr__`-based file wrappers,function,4277,1069,2,0
-7502,Fix `_encode_files` detection for `__getattr__`-based file wrappers,file,31631,7907,2,0
+7502,Fix `_encode_files` detection for `__getattr__`-based file wrappers,file,17304,4326,2,0
 7433,Fix `prepare_body` stream detection for `__getattr__`-based file wrappers,diff,1519,379,2,0
 7433,Fix `prepare_body` stream detection for `__getattr__`-based file wrappers,function,5260,1315,2,0
-7433,Fix `prepare_body` stream detection for `__getattr__`-based file wrappers,file,34787,8696,2,0
+7433,Fix `prepare_body` stream detection for `__getattr__`-based file wrappers,file,17324,4331,2,0
