@@ -78,6 +78,7 @@ def review(
     start_line: int = 1,
     extra_context: str | None = None,
     context_level: str | None = None,
+    errors: list[str] | None = None,
 ) -> list[Finding]:
     """Review code context using an LLM client and return validated findings.
 
@@ -111,6 +112,8 @@ def review(
         raw_response = client.complete(system=SYSTEM_PROMPT, user=user_prompt)
     except Exception as err:
         logger.warning("LLM client failed during initial review call: %s", err)
+        if errors is not None:
+            errors.append(str(err))
         return []
 
     # Step 2: Extract & validate with single retry on failure
@@ -138,6 +141,8 @@ def review(
                 "LLM review failed after retry. Validation error: %s. Returning empty findings.",
                 retry_err,
             )
+            if errors is not None:
+                errors.append(str(retry_err))
             return []
 
     if review_result is None:

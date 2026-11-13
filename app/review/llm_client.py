@@ -573,6 +573,15 @@ class OpenAICompatLLMClient(LLMClient):
 
                 jitter = random.uniform(0.1, 0.5)
                 delay = delays[attempt] + jitter
+                if status_code == 429:
+                    retry_after_hdr = err.response.headers.get("Retry-After") or err.response.headers.get("retry-after")
+                    if retry_after_hdr is not None:
+                        try:
+                            delay = min(float(retry_after_hdr) + jitter, 70.0)
+                        except ValueError:
+                            delay = 60.0 + jitter
+                    else:
+                        delay = max(delay, 60.0) + jitter
                 retry_msg = f"[Retry {attempt + 1}/{max_retries}] HTTP {status_code} received from LLM endpoint. Retrying in {delay:.2f}s..."
                 print(retry_msg, flush=True)
                 logger.warning(
